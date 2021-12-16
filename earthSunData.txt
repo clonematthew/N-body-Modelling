@@ -1,0 +1,3 @@
+Time MaxTime Xpos Ypos Zpos Xvel Yvel Zvel Mass 
+0 3e9 0 0 0 0 0 0 1.989e+30
+0 3153600000 150000000000.0 0 0 0 29722 0 5.9722e+24
