@@ -250,7 +250,7 @@ def hermiteIntegrator(dt, dynamicTimeStep, outputInterval, dataFile, maxTime):
             zarrs = np.append(zarrs, np.array_split(zpos, numberOfBodies), axis=1)
 
             # Outputting the current data to a file
-            output(timeKeeper, xpos, ypos, zpos, xvel, yvel, zvel, mass)
+            #output(timeKeeper, xpos, ypos, zpos, xvel, yvel, zvel, mass)
 
     return GP, KE, xarrs, yarrs, zarrs     
 
