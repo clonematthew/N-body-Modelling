@@ -4,11 +4,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numba import jit
+from tqdm import tqdm
 
 # Defining important constants
 G = np.float64(6.67e-11)
-softening = np.float64(6e8)
-eta = np.float64(0.1)
+softening = np.float64(6e7)
+eta = np.float64(0.05)
 
 # Calculating useful fractions
 half = np.float64(1./2.)
@@ -46,34 +47,33 @@ def accelerations(x, y, z, vx, vy, vz, m, n):
             GPEij = np.float64(0)
 
             # Calculating the position and velocity vectors
-            rijx = x[bodyIndex] - x[otherBodyIndex]
-            rijy = y[bodyIndex] - y[otherBodyIndex]
-            rijz = z[bodyIndex] - z[otherBodyIndex]
+            rijx =  x[otherBodyIndex] - x[bodyIndex]
+            rijy =  y[otherBodyIndex] - y[bodyIndex]
+            rijz =  z[otherBodyIndex] - z[bodyIndex]
 
-            vijx = vx[bodyIndex] - vx[otherBodyIndex]
-            vijy = vy[bodyIndex] - vy[otherBodyIndex]
-            vijz = vz[bodyIndex] - vz[otherBodyIndex]
+            vijx =  vx[otherBodyIndex] - vx[bodyIndex] 
+            vijy =  vy[otherBodyIndex] - vy[bodyIndex] 
+            vijz =  vz[otherBodyIndex] - vz[bodyIndex]
 
             # Calculating the magnitudes of the vectors
-            rij = np.sqrt(rijx*rijx + rijy*rijy + rijz*rijz)
+            rij = np.sqrt(rijx*rijx + rijy*rijy + rijz*rijz + softening*softening)
 
             # Finding the dot product of the velocity and position vectors
             rijvijdot = rijx*vijx + rijy*vijy + rijz*vijz
 
             # Calculating the divison terms used to calculate a and adot
-            divisonTerm = rij*rij + softening*softening
-            divisonTermThreeTwo = divisonTerm**(3/2)
-            divisonTermFiveTwo = divisonTerm**(5/2)
+            divisonTermThree = 1.0/rij**(3)
+            divisonTermFive = 1.0/rij**(5)
 
             # Calculating acceleration
-            ax[bodyIndex] = ax[bodyIndex] + (-G * m[otherBodyIndex]) * (rijx/divisonTermThreeTwo)
-            ay[bodyIndex] = ay[bodyIndex] + (-G * m[otherBodyIndex]) * (rijy/divisonTermThreeTwo)
-            az[bodyIndex] = az[bodyIndex] + (-G * m[otherBodyIndex]) * (rijz/divisonTermThreeTwo)
+            ax[bodyIndex] = ax[bodyIndex] + (G * m[otherBodyIndex]) * (rijx*divisonTermThree)
+            ay[bodyIndex] = ay[bodyIndex] + (G * m[otherBodyIndex]) * (rijy*divisonTermThree)
+            az[bodyIndex] = az[bodyIndex] + (G * m[otherBodyIndex]) * (rijz*divisonTermThree)
 
             # Calculating adot
-            adx[bodyIndex] = adx[bodyIndex] + (G * m[otherBodyIndex]) * ((vijx/divisonTermThreeTwo) + 3*(rijvijdot*rijx/divisonTermFiveTwo))
-            ady[bodyIndex] = ady[bodyIndex] + (G * m[otherBodyIndex]) * ((vijy/divisonTermThreeTwo) + 3*(rijvijdot*rijy/divisonTermFiveTwo))
-            ady[bodyIndex] = adz[bodyIndex] + (G * m[otherBodyIndex]) * ((vijz/divisonTermThreeTwo) + 3*(rijvijdot*rijz/divisonTermFiveTwo))
+            adx[bodyIndex] = adx[bodyIndex] + (G * m[otherBodyIndex]) * ((vijx*divisonTermThree) + 3.0*(rijvijdot*rijx*divisonTermFive))
+            ady[bodyIndex] = ady[bodyIndex] + (G * m[otherBodyIndex]) * ((vijy*divisonTermThree) + 3.0*(rijvijdot*rijy*divisonTermFive))
+            ady[bodyIndex] = adz[bodyIndex] + (G * m[otherBodyIndex]) * ((vijz*divisonTermThree) + 3.0*(rijvijdot*rijz*divisonTermFive))
 
             # Calculating the gravitational potential
             GPEij = -G * m[bodyIndex] * m[otherBodyIndex] / rij
@@ -89,24 +89,33 @@ def accelerations(x, y, z, vx, vy, vz, m, n):
 
 # Function to set the timestep according to the Hermite Scheme
 @jit(nopython=True)
-def hermiteTimeStep(xacel, yacel, zacel, xadot, yadot, zadot, xa2dot, ya2dot, za2dot, xa3dot, ya3dot, za3dot, numberOfBodies):
+def hermiteTimeStep(xacel, yacel, zacel, xadot, yadot, zadot, xadotdot, yadotdot, zadotdot, xadotdotdot, yadotdotdot, zadotdotdot, numberOfBodies, dt):
     # Creating an empty list for the prospective timesteps
     dtList = []
+    dt = float(dt)
+    newdt = float(0)
+    arsethStabilityCriterion = float(1.3)
 
     # Looping through each body to determine the timestep for that body
     for body in range(numberOfBodies):
 
-        # Calculating the scalar for a, adot, a2dot and a3dot
+        # Calculating the scalar for a, adot, adotdot and adotdotdot
         a = np.sqrt(xacel[body]*xacel[body] + yacel[body]*yacel[body] + zacel[body]*zacel[body])
         ad = np.sqrt(xadot[body]*xadot[body] + yadot[body]*yadot[body] + zadot[body]*zadot[body])
-        add = np.sqrt(xa2dot[body]*xa2dot[body] + ya2dot[body]*ya2dot[body] + za2dot[body]*za2dot[body])
-        addd = np.sqrt(xa3dot[body]*xa3dot[body] + ya3dot[body]*ya3dot[body] + za3dot[body]*za3dot[body])
+        add = np.sqrt(xadotdot[body]*xadotdot[body] + yadotdot[body]*yadotdot[body] + zadotdot[body]*zadotdot[body])
+        addd = np.sqrt(xadotdotdot[body]*xadotdotdot[body] + yadotdotdot[body]*yadotdotdot[body] + zadotdotdot[body]*zadotdotdot[body])
 
         # Calculating the timestep
         dtList.append(np.sqrt(eta * ((a*add + ad**2)/(ad*addd + add**2))))
 
+    # Checking the timestep jump isn't to big
+    if min(dtList)/dt > arsethStabilityCriterion:
+        newdt = dt*arsethStabilityCriterion
+    else:
+        newdt = min(dtList)
+
     # Returning the smallest timestep for usage
-    return min(dtList)
+    return newdt
 
 # The function that initialises the integrator from a data file input
 def initIntegrator(dataFile):
@@ -117,34 +126,44 @@ def initIntegrator(dataFile):
     numberOfBodies = len(xpos)
 
     # Setting up arrays
-    xacel = np.zeros(numberOfBodies, dtype=np.float64)
-    yacel = np.zeros(numberOfBodies, dtype=np.float64)
-    zacel = np.zeros(numberOfBodies, dtype=np.float64)
+    xacelP = np.zeros(numberOfBodies, dtype=np.float64)
+    yacelP = np.zeros(numberOfBodies, dtype=np.float64)
+    zacelP = np.zeros(numberOfBodies, dtype=np.float64)
 
-    xadot = np.zeros(numberOfBodies, dtype=np.float64)
-    yadot = np.zeros(numberOfBodies, dtype=np.float64)
-    zadot = np.zeros(numberOfBodies, dtype=np.float64)
+    xadotP = np.zeros(numberOfBodies, dtype=np.float64)
+    yadotP = np.zeros(numberOfBodies, dtype=np.float64)
+    zadotP = np.zeros(numberOfBodies, dtype=np.float64)
 
-    xa2dot = np.zeros(numberOfBodies, dtype=np.float64)
-    ya2dot = np.zeros(numberOfBodies, dtype=np.float64)
-    za2dot = np.zeros(numberOfBodies, dtype=np.float64)
+    xadotdot = np.zeros(numberOfBodies, dtype=np.float64)
+    yadotdot = np.zeros(numberOfBodies, dtype=np.float64)
+    zadotdot = np.zeros(numberOfBodies, dtype=np.float64)
 
-    xa3dot = np.zeros(numberOfBodies, dtype=np.float64)
-    ya3dot = np.zeros(numberOfBodies, dtype=np.float64)
-    za3dot = np.zeros(numberOfBodies, dtype=np.float64)
+    xadotdotdot = np.zeros(numberOfBodies, dtype=np.float64)
+    yadotdotdot = np.zeros(numberOfBodies, dtype=np.float64)
+    zadotdotdot = np.zeros(numberOfBodies, dtype=np.float64)
 
-    xacel0 = np.zeros(numberOfBodies, dtype=np.float64)
-    yacel0 = np.zeros(numberOfBodies, dtype=np.float64)
-    zacel0 = np.zeros(numberOfBodies, dtype=np.float64)
+    xAcelC = np.zeros(numberOfBodies, dtype=np.float64)
+    yAcelC = np.zeros(numberOfBodies, dtype=np.float64)
+    zAcelC = np.zeros(numberOfBodies, dtype=np.float64)
 
-    xadot0 = np.zeros(numberOfBodies, dtype=np.float64)
-    yadot0 = np.zeros(numberOfBodies, dtype=np.float64)
-    zadot0 = np.zeros(numberOfBodies, dtype=np.float64)
+    xAdotC= np.zeros(numberOfBodies, dtype=np.float64)
+    yAdotC = np.zeros(numberOfBodies, dtype=np.float64)
+    zAdotC = np.zeros(numberOfBodies, dtype=np.float64)
+
+    xAcelCT = np.zeros(numberOfBodies, dtype=np.float64)
+    yAcelCT = np.zeros(numberOfBodies, dtype=np.float64)
+    zAcelCT = np.zeros(numberOfBodies, dtype=np.float64)
+
+    xAdotCT = np.zeros(numberOfBodies, dtype=np.float64)
+    yAdotCT = np.zeros(numberOfBodies, dtype=np.float64)
+    zAdotCT = np.zeros(numberOfBodies, dtype=np.float64)
 
     # Arrays for plotting
     xarrs = np.zeros((numberOfBodies,1), dtype=np.float64)
     yarrs = np.zeros((numberOfBodies,1), dtype=np.float64)
     zarrs = np.zeros((numberOfBodies,1), dtype=np.float64)
+    tarrs = np.zeros(1, dtype=np.float64)
+    dtarrs = np.zeros(1, dtype=np.float64)
 
     # Setting up the values for time etc
     timeKeeper = timeKeeper[0]
@@ -154,7 +173,7 @@ def initIntegrator(dataFile):
     KE = np.zeros((numberOfBodies,1), dtype=np.float64)
     GP = np.zeros((numberOfBodies,1), dtype=np.float64)
 
-    return timeKeeper, maxTime, xpos, ypos, zpos, xvel, yvel, zvel, mass, xacel, yacel, zacel, xadot, yadot, zadot, xa2dot, ya2dot, za3dot, xa3dot, ya3dot, za3dot, numberOfBodies, xarrs, yarrs, zarrs, KE, GP, xacel0, yacel0, zacel0, xadot0, yadot0, zadot0
+    return timeKeeper, maxTime, xpos, ypos, zpos, xvel, yvel, zvel, mass, xacelP, yacelP, zacelP, xadotP, yadotP, zadotP, xadotdot, yadotdot, zadotdotdot, xadotdotdot, yadotdotdot, zadotdotdot, numberOfBodies, xarrs, yarrs, zarrs, KE, GP, xAcelC, yAcelC, zAcelC, xAdotC, yAdotC, zAdotC, xAcelCT, yAcelCT, zAcelCT, xAdotCT, yAdotCT, zAdotCT, dtarrs, tarrs
 
 # Function for outputting to a file
 def output(time, xpositions, ypositions, zpositions, xvelocities, yvelocities, zvelocities, masses):
@@ -177,54 +196,84 @@ def output(time, xpositions, ypositions, zpositions, xvelocities, yvelocities, z
             file.write(str(masses[i]) + "\n") 
 
 # The function to start the integrator running
-def hermiteIntegrator(dt, dynamicTimeStep, outputInterval, dataFile, maxTime):
+def hermiteIntegrator(dt, dynamicTimeStep, outputNumber, dataFile, maxTime):
     # Initialising the integrator
-    timeKeeper, _, xpos, ypos, zpos, xvel, yvel, zvel, mass, xacel, yacel, zacel, xadot, yadot, zadot, xa2dot, ya2dot, za3dot, xa3dot, ya3dot, za3dot, numberOfBodies, xarrs, yarrs, zarrs, KE, GP, xacel0, yacel0, zacel0, xadot0, yadot0, zadot0 = initIntegrator(dataFile)
+    timeKeeper, _, xpos, ypos, zpos, xvel, yvel, zvel, mass, xacelP, yacelP, zacelP, xadotP, yadotP, zadotP, xadotdot, yadotdot, zadotdotdot, xadotdotdot, yadotdotdot, zadotdotdot, numberOfBodies, xarrs, yarrs, zarrs, KE, GP, xAcelC, yAcelC, zAcelC, xAdotC, yAdotC, zAdotC, xAcelCT, yAcelCT, zAcelCT, xAdotCT, yAdotCT, zAdotCT, # dtarrs, tarrs = initIntegrator(dataFile)
     
     # Starting a counter for the outputting
+    outputInterval = maxTime / np.float64(outputNumber)
     timeElapsedSinceLastOutput = 0
+
+    # Starting the progress bar
+    progressBar = tqdm(total=maxTime)
+    
+    # Setting the order of the scheme
+    pecOrder = 2
 
     # The main program loop
     while timeKeeper < maxTime:
 
         # Calculating the powers of dt
-        dt2 = (dt**2)
-        dt3 = (dt**3)
-        dt4 = (dt**4)
-        dt5 = (dt**5)
+        dt = np.float64(dt)
+        dt2 = np.float64(dt**2)
+        dt3 = np.float64(dt**3)
 
-        # Calculating the initial acceleration values
-        xacel0, yacel0, zacel0, xadot0, yadot0, zadot0, _ = accelerations(xpos, ypos, zpos, xvel, yvel, zvel, mass, numberOfBodies)
+        # Prediction Step
+        xacelP, yacelP, zacelP, xadotP, yadotP, zadotP, _ = accelerations(xpos, ypos, zpos, xvel, yvel, zvel, mass, numberOfBodies)
 
-        # Predicting the objects positions and velocities based on these accelerations
-        xpos = np.float64(dt3*sixth*xadot0 + dt2*half*xacel0 + dt*xvel + xpos)
-        ypos = np.float64(dt3*sixth*yadot0 + dt2*half*yacel0 + dt*yvel + ypos)
-        zpos = np.float64(dt3*sixth*zadot0 + dt2*half*zacel0 + dt*zvel + zpos)
+        xPosPrediction = np.float64(dt3*sixth*xadotP + dt2*half*xacelP + dt*xvel + xpos)
+        yPosPrediction = np.float64(dt3*sixth*yadotP + dt2*half*yacelP + dt*yvel + ypos)
+        zPosPrediction = np.float64(dt3*sixth*zadotP + dt2*half*zacelP + dt*zvel + zpos)
 
-        xvel = np.float64(dt2*half*xadot0 + dt*xacel0 + xvel)
-        yvel = np.float64(dt2*half*yadot0 + dt*yacel0 + yvel)
-        zvel = np.float64(dt2*half*zadot0 + dt*zacel0 + zvel)
+        xVelPrediction = np.float64(dt2*half*xadotP + dt*xacelP + xvel)
+        yVelPrediction = np.float64(dt2*half*yadotP + dt*yacelP + yvel)
+        zVelPrediction = np.float64(dt2*half*zadotP + dt*zacelP + zvel)
 
-        # Using these predictions to determine the accelerations again
-        xacel, yacel, zacel, xadot, yadot, zadot, gravitationalPotentials = accelerations(xpos, ypos, zpos, xvel, yvel, zvel, mass, numberOfBodies)
+        # First Correction Step
+        xAcelC, yAcelC, zAcelC, xAdotC, yAdotC, zAdotC, gravitationalPotentials = accelerations(xPosPrediction, yPosPrediction, zPosPrediction, xVelPrediction, yVelPrediction, zVelPrediction, mass, numberOfBodies)
 
-        # Using these values to determine second and third derivative of acceleration
-        xa2dot = np.float64(-6*(xacel0 - xacel)/dt2 - (4*xadot0 + 2*xadot)/dt)
-        ya2dot = np.float64(-6*(yacel0 - yacel)/dt2 - (4*yadot0 + 2*yadot)/dt)
-        za2dot = np.float64(-6*(zacel0 - zacel)/dt2 - (4*zadot0 + 2*zadot)/dt)
+        xadotdot = np.float64(-6.0*(xacelP - xAcelC) - (4.0*xadotP + 2.0*xAdotC)*dt)
+        yadotdot = np.float64(-6.0*(yacelP - yAcelC) - (4.0*yadotP + 2.0*yAdotC)*dt)
+        zadotdot = np.float64(-6.0*(zacelP - zAcelC) - (4.0*zadotP + 2.0*zAdotC)*dt)
 
-        xa3dot = np.float64(12*(xacel0 - xacel)/dt3 + 6*(xadot0 + xadot)/dt2)
-        ya3dot = np.float64(12*(yacel0 - yacel)/dt3 + 6*(yadot0 + yadot)/dt2)
-        za3dot = np.float64(12*(zacel0 - zacel)/dt3 + 6*(zadot0 + zadot)/dt2)
+        xadotdotdot = np.float64(12.0*(xacelP - xAcelC) + 6.0*(xadotP + xAdotC)*dt)
+        yadotdotdot = np.float64(12.0*(yacelP - yAcelC) + 6.0*(yadotP + yAdotC)*dt)
+        zadotdotdot = np.float64(12.0*(zacelP - zAcelC) + 6.0*(zadotP + zAdotC)*dt)
 
-        # Using the derivaties to correct the position and velocity values
-        xpos = np.float64(xpos + (xa2dot*twentyFourth*dt4) + (xa3dot*oneHundredAndTwentyth*dt5))
-        ypos = np.float64(ypos + (ya2dot*twentyFourth*dt4) + (ya3dot*oneHundredAndTwentyth*dt5))
-        zpos = np.float64(zpos + (za2dot*twentyFourth*dt4) + (za3dot*oneHundredAndTwentyth*dt5))
+        xPosCorrectionOne = np.float64(xPosPrediction + (xadotdot*twentyFourth*dt2) + (xadotdotdot*oneHundredAndTwentyth*dt2))
+        yPosCorrectionOne = np.float64(yPosPrediction + (yadotdot*twentyFourth*dt2) + (yadotdotdot*oneHundredAndTwentyth*dt2))
+        zPosCorrectionOne = np.float64(zPosPrediction + (zadotdot*twentyFourth*dt2) + (zadotdotdot*oneHundredAndTwentyth*dt2))
 
-        xvel = np.float64(xvel + (xa2dot*sixth*dt3) + (xa3dot*twentyFourth*dt4))
-        yvel = np.float64(yvel + (ya2dot*sixth*dt3) + (ya3dot*twentyFourth*dt4))
-        zvel = np.float64(zvel + (za2dot*sixth*dt3) + (za3dot*twentyFourth*dt4))
+        xVelCorrectionOne = np.float64(xVelPrediction + (xadotdot*sixth*dt) + (xadotdotdot*twentyFourth*dt))
+        yVelCorrectionOne = np.float64(yVelPrediction + (yadotdot*sixth*dt) + (yadotdotdot*twentyFourth*dt))
+        zVelCorrectionOne = np.float64(zVelPrediction + (zadotdot*sixth*dt) + (zadotdotdot*twentyFourth*dt))
+
+        # Second Correction Step This entire step is currently commented out in the real code as including this produces even greater energy errors
+        xAcelCT, yAcelCT, zAcelCT, xAdotCT, yAdotCT, zAdotCT, gravitationalPotentials = accelerations(xPosCorrectionOne, yPosCorrectionOne, zPosCorrectionOne, xVelCorrectionOne, yVelCorrectionOne, zVelCorrectionOne, mass, numberOfBodies)
+
+        xadotdot = np.float64(-6.0*(xAcelC - xAcelCT) - (4.0*xAdotC + 2.0*xAdotCT)*dt)
+        yadotdot = np.float64(-6.0*(yAcelC - yAcelCT) - (4.0*yAdotC + 2.0*yAdotCT)*dt)
+        zadotdot = np.float64(-6.0*(zAcelC - zAcelCT) - (4.0*zAdotC + 2.0*zAdotCT)*dt)
+
+        xadotdotdot = np.float64(12.0*(xAcelC - xAcelCT) + 6.0*(xAdotC + xAdotCT)*dt)
+        yadotdotdot = np.float64(12.0*(yAcelC - yAcelCT) + 6.0*(yAdotC + yAdotCT)*dt)
+        zadotdotdot = np.float64(12.0*(zAcelC - zAcelCT) + 6.0*(zAdotC + zAdotCT)*dt)
+
+        xPosCorrectionTwo = np.float64(xPosCorrectionOne + (xadotdot*twentyFourth*dt2) + (xadotdotdot*oneHundredAndTwentyth*dt2))
+        yPosCorrectionTwo = np.float64(yPosCorrectionOne + (yadotdot*twentyFourth*dt2) + (yadotdotdot*oneHundredAndTwentyth*dt2))
+        zPosCorrectionTwo = np.float64(zPosCorrectionOne + (zadotdot*twentyFourth*dt2) + (zadotdotdot*oneHundredAndTwentyth*dt2))
+
+        xVelCorrectionTwo = np.float64(xVelCorrectionOne + (xadotdot*sixth*dt) + (xadotdotdot*twentyFourth*dt))
+        yVelCorrectionTwo = np.float64(yVelCorrectionOne + (yadotdot*sixth*dt) + (yadotdotdot*twentyFourth*dt))
+        zVelCorrectionTwo = np.float64(zVelCorrectionOne + (zadotdot*sixth*dt) + (zadotdotdot*twentyFourth*dt))
+
+        xpos = xPosCorrectionTwo
+        ypos = yPosCorrectionTwo
+        zpos = zPosCorrectionTwo
+
+        xvel = xVelCorrectionTwo
+        yvel = yVelCorrectionTwo
+        zvel = zVelCorrectionTwo
 
         # Calculating the KE and GPE
         kineticEnergy = half * mass * (xvel*xvel + yvel*yvel + zvel*zvel)
@@ -233,14 +282,17 @@ def hermiteIntegrator(dt, dynamicTimeStep, outputInterval, dataFile, maxTime):
 
         # Updating the timestep based on the accelerations felt
         if dynamicTimeStep == True:
-            dt = hermiteTimeStep(xacel, yacel, zacel, xadot, yadot, zadot, xa2dot, ya2dot, za2dot, xa3dot, ya3dot, za3dot, numberOfBodies)
+            dt = hermiteTimeStep(xac, yac, zac, xadc, yadc, zadc, xadotdot, yadotdot, zadotdot, xadotdotdot, yadotdotdot, zadotdotdot, numberOfBodies, dt)
 
         # Ticking the clock
-        timeKeeper = timeKeeper + dt
+        timeKeeper = timeKeeper + int(dt)
 
         # Outputting based on the given time interval
         timeElapsedSinceLastOutput = timeElapsedSinceLastOutput + dt
         if timeElapsedSinceLastOutput > outputInterval:
+            # Updating the progress bar
+            progressBar.update(timeElapsedSinceLastOutput)
+
             # Resetting the clock
             timeElapsedSinceLastOutput = 0
 
@@ -248,11 +300,16 @@ def hermiteIntegrator(dt, dynamicTimeStep, outputInterval, dataFile, maxTime):
             xarrs = np.append(xarrs, np.array_split(xpos, numberOfBodies), axis=1)
             yarrs = np.append(yarrs, np.array_split(ypos, numberOfBodies), axis=1)
             zarrs = np.append(zarrs, np.array_split(zpos, numberOfBodies), axis=1)
+            dtarrs = np.append(dtarrs, dt)
+            tarrs = np.append(tarrs, timeKeeper)
 
             # Outputting the current data to a file
             #output(timeKeeper, xpos, ypos, zpos, xvel, yvel, zvel, mass)
 
-    return GP, KE, xarrs, yarrs, zarrs     
+    # Closing the progress bar
+    progressBar.close()
+
+    return GP, KE, xarrs, yarrs, zarrs, dtarrs   
 
 # Asking for simulaiton parameters
 textFile = input("Name of the data file: ")
@@ -273,7 +330,7 @@ if timeUnit == "Gyear":
     timeUnit = 1e9 * 365*24*60*60
 elif timeUnit == "Myear":
     timeUnit = 1e6 * 365*24*60*60
-elif timeUnit == "kyear":
+elif timeUnit == "kYear":
     timeUnit = 1e3 * 365*24*60*60
 elif timeUnit == "Year":
     timeUnit = 365*24*60*60
@@ -282,17 +339,45 @@ elif timeUnit == "Month":
 elif timeUnit == "Week":
     timeUnit = 7*24*60*60
 else:
-    timeUnit = 24*60*60
+    timeUnit = 24*60*60*365
 
 maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
 
-outputInterval = maximumTime / np.float64(outputNumber)
-
 # Calling the hermite function
-g, k, x, y, z = hermiteIntegrator(np.int64(initialdt), dyn, np.float64(outputInterval), str(textFile), np.int64(maximumTime))
+g, k, x, y, z, t = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), str(textFile), np.int64(maximumTime))
+
+# Getting the shape of the arrays
+arrayShape = g.shape
+bodyAmount = arrayShape[0]
+valuesAmount = arrayShape[1]
+
+# Summing energies
+totalKinetic = np.zeros(valuesAmount)
+totalGravity = np.zeros(valuesAmount)
+
+# Looping through to sum
+for i in range(bodyAmount):
+    totalKinetic = totalKinetic + k[i]
+    totalGravity = totalGravity + g[i]
+
+# Getting the total energy
+totalEnergy = totalKinetic + totalGravity
+
+# Getting the initial energy
+initialEnergy = totalEnergy[1]
+
+# Finding the % change
+percentChange = (totalEnergy-initialEnergy)/initialEnergy
+
+# Plotting the energy evolution
+plt.figure(figsize=(10,10))
+plt.plot(percentChange[1:])
+plt.show()
 
 plt.figure(figsize=(10,10))
-plt.plot(x[1][1:], y[1][1:], "r")
-plt.xlabel("x, m")
-plt.ylabel("y, m")
+plt.plot(x[1][1:], y[1][1:])
+plt.show()
+
+plt.figure(figsize=(10,10))
+plt.plot(t[1:])
 plt.show()
