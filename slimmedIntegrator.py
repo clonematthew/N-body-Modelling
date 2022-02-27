@@ -8,15 +8,15 @@ from numba import jit
 from tqdm import tqdm
 
 # Defining constants
-G = np.float64(6.67e-11)    # Newton's Gravitational constant
-s = np.float64(6e7)         # Softening, gravity "blurring"
-e = np.float64(0.05)        # Eta, timestep accuracy parameter
-a = np.float64(1.3)         # Arseth stability criterion
+G = np.float64(6.67430e-11) # Newton's Gravitational constant
+s = np.float64(6.0e6)       # Softening, gravity "blurring"
+e = np.float64(0.007)       # Eta, timestep accuracy parameter
+ac = np.float64(1.3)        # Arseth stability criterion
 sixth = np.float64(1.0/6.0) # One over Six, for speed
 
 # Function that determines accelerations
 @jit(nopython=True)
-def accelerations(x, y, z, vx, vy, vz, m, n):
+def accelerations(x, y, z, vx, vy, vz, m, n, nlist):
     # Resetting and allocating memory
     ax = np.zeros(n, dtype=np.float64)
     ay = np.zeros(n, dtype=np.float64)
@@ -28,15 +28,11 @@ def accelerations(x, y, z, vx, vy, vz, m, n):
 
     # First loop through every body
     for i in range(n):
-        # Creating a list of body indicies that doesn't include i
-        blist = np.arange(0, n, 1, dtype=np.int64)
-        blist = np.delete(blist, i)
-
         # Setting GPE for this body to zero
         gpei = np.float64(0)
 
         # Looping through all other bodies
-        for j in blist:
+        for j in nlist[i:i+n]:
             # Resetting gpe
             gpeij = np.float64(0)
 
@@ -93,7 +89,6 @@ def accelerations(x, y, z, vx, vy, vz, m, n):
 def nextTimeStep(ax, ay, az, adx, ady, adz, addx, addy, addz, adddx, adddy, adddz, n, dt):
     # List for timesteps & setting old and new dt values
     dtList = []
-    newdt = np.float64(0)
     dt = np.float64(dt)
 
     # Looping through all bodies to determine their timestep
@@ -101,20 +96,29 @@ def nextTimeStep(ax, ay, az, adx, ady, adz, addx, addy, addz, adddx, adddy, addd
         # Calculating values of a, ad, add, addd
         a = np.sqrt(ax[b]*ax[b] + ay[b]*ay[b] + az[b]*az[b])
         ad = np.sqrt(adx[b]*adx[b] + ady[b]*ady[b] + adz[b]*adz[b])
-        add = np.sqrt(addx[b]*addx[b] + addy[b]*addy[b] + addz[b]*addz[b])
-        addd = np.sqrt(adddx[b]*adddx[b] + adddy[b]*adddy[b] + adddz[b]*adddz[b])
 
         # Calculating timestep
-        dtList.append(np.sqrt(e * ((a*add + ad**2)/(ad*addd + add**2))))
-
-    # Preventing too large timestep changes
-    if min(dtList)/dt > a:
-        newdt = dt*a
-    else:
-        newdt = min(dtList)
+        dtList.append(e*a/ad)
 
     # Returning the new timestep
-    return newdt
+    return min(dtList)
+
+def output(time, maxTime, xpositions, ypositions, zpositions, xvelocities, yvelocities, zvelocities, masses, numberOfObjects):
+    # Defining the name of the file
+    fname = "{:.2f}.txt".format(time/maxTime)
+
+    # Opening the file
+    with open(fname, "w") as file:
+        
+        # Writing the headers
+        file.write("Time MaxTime Xpos Ypos Zpos Xvel Yvel Zvel Mass \n")
+
+        # Looping through each object 
+        for i in range(numberOfObjects):
+            file.write(str(time) + " " + str(maxTime) + " ")
+            file.write(str(xpositions[i]) + " " + str(ypositions[i]) + " " + str(zpositions[i]) + " ")
+            file.write(str(xvelocities[i]) + " " + str(yvelocities[i]) + " " + str(zvelocities[i]) + " ")
+            file.write(str(masses[i]) + "\n") 
 
 # Function that initialises the integrator 
 def init(dataFile):
@@ -125,119 +129,168 @@ def init(dataFile):
     n = len(x)
 
     # Setting up the arrays for acceleration
-    axp = ayp = azp = adxp = adyp = adzp = np.zeros(n, dtype=np.float64)
-    xadd = yadd = zadd = xaddd = yaddd = zaddd = np.zeros(n, dtype=np.float64)
-    axc = ayc = azc = adxc = adyc = adzc = np.zeros(n, dtype=np.float64)
+    axp = np.zeros(n, dtype=np.float64)
+    ayp = np.zeros(n, dtype=np.float64)
+    azp = np.zeros(n, dtype=np.float64)
+    adxp = np.zeros(n, dtype=np.float64)
+    adyp = np.zeros(n, dtype=np.float64)
+    adzp = np.zeros(n, dtype=np.float64)
+    xadd = np.zeros(n, dtype=np.float64)
+    yadd = np.zeros(n, dtype=np.float64)
+    zadd = np.zeros(n, dtype=np.float64)
+    xaddd = np.zeros(n, dtype=np.float64)
+    yaddd = np.zeros(n, dtype=np.float64)
+    zaddd = np.zeros(n, dtype=np.float64)
+    axc = np.zeros(n, dtype=np.float64)
+    ayc = np.zeros(n, dtype=np.float64)
+    azc = np.zeros(n, dtype=np.float64)
+    adxc = np.zeros(n, dtype=np.float64)
+    adyc =np.zeros(n, dtype=np.float64)
+    adzc = np.zeros(n, dtype=np.float64)
 
     # Setting up arrays for position and velocity
-    xp = yp = zp = vxp = vyp = vzp = np.zeros(n, dtype=np.float64)
-    xc = yc = zc = vxc = vyc = vzc = np.zeros(n, dtype=np.float64)
+    xp = np.zeros(n, dtype=np.float64)
+    yp = np.zeros(n, dtype=np.float64)
+    zp = np.zeros(n, dtype=np.float64)
+    vxp =np.zeros(n, dtype=np.float64)
+    vyp = np.zeros(n, dtype=np.float64)
+    vzp = np.zeros(n, dtype=np.float64)
+    xc = np.zeros(n, dtype=np.float64)
+    yc = np.zeros(n, dtype=np.float64)
+    zc = np.zeros(n, dtype=np.float64)
+    vxc =np.zeros(n, dtype=np.float64)
+    vyc =np.zeros(n, dtype=np.float64)
+    vzc = np.zeros(n, dtype=np.float64)
 
     # Setting up arrays for plotting # TODO: Delete
     xarr = yarr = zarr = np.zeros((n, 1), dtype=np.float64)
     tarr = dtarr = np.zeros(1, dtype=np.float64)
-    K = np.zeros((n, 1), dtype=np.float64)
-    G = np.zeros((n, 1), dtype=np.float64)
+    Ke = Ge = Px = Py = Pz = np.zeros((n, 1), dtype=np.float64)
 
     # Only choosing the 1st value from the time array
     t = t[0]
 
     # Returning all the arrays
-    return t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, K, G
+    return t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz
 
 # Function that actually runs the integrator
 def hermiteIntegrator(dt, dynamicTimestep, outputNumber, dataFile, tmax):
     # Initialising
-    t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, K, G = init(dataFile)
+    t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz = init(dataFile)
 
     # Setting up counters and progress bar etc
     outputInterval = np.float64(tmax / outputNumber)
     outputCounter = 0.0
     progBar = tqdm(total=tmax)
+    
+    # List for looping
+    nlist = np.arange(0, n, 1, dtype=np.int64)
+    nlist = np.append(nlist, nlist)
 
     # Setting number of times to predict correct
     pecOrder = 3
 
-    # The main while loop of the function
-    while t < tmax:
-        # Calculating dt powers 
-        dt = np.float64(dt)
-        dt2 = dt*dt
-        dt3 = dt*dt*dt
+    # Assigning variables to ke and pm
+    ke = np.zeros(n, dtype=np.float64)
+    pm = np.zeros(n, dtype=np.float64)
 
-        # Prediction step
-        axp, ayp, azp, adxp, adyp, adzp, _ = accelerations(x, y, z, vx, vy, vz, m, n)
+    try:
+        # The main while loop of the function
+        while t < tmax:
+            # Calculating dt powers 
+            dt = np.float64(dt)
+            dt2 = dt*dt
+            dt3 = dt*dt*dt
+            dt4 = dt*dt*dt*dt
+            dt5 = dt*dt*dt*dt*dt
 
-        xp = x + vx*dt + axp*dt2*0.5 + adxp*dt3*sixth
-        yp = y + vy*dt + ayp*dt2*0.5 + adyp*dt3*sixth
-        zp = z + vz*dt + azp*dt2*0.5 + adzp*dt3*sixth
+            # Prediction step
+            axp, ayp, azp, adxp, adyp, adzp, _ = accelerations(x, y, z, vx, vy, vz, m, n, nlist)
 
-        vxp = vx + dt*axp + 0.5*adxp*dt2
-        vyp = vy + dt*ayp + 0.5*adyp*dt2
-        vzp = vz + dt*azp + 0.5*adzp*dt2
+            xp = x + vx*dt + axp*dt2*0.5 + adxp*dt3*sixth
+            yp = y + vy*dt + ayp*dt2*0.5 + adyp*dt3*sixth
+            zp = z + vz*dt + azp*dt2*0.5 + adzp*dt3*sixth
 
-        # Start the loop through for correcting
-        for it in range(pecOrder):
-            # Using predicited p and v for first loop, corrected for all else
-            if it == 0:
-                axc, ayc, azc, adxc, adyc, adzc, gp = accelerations(xp, yp, zp, vxp, vyp, vzp, m, n)
-            else:
-                axc, ayc, azc, adxc, adyc, adzc, gp = accelerations(xc, yc, zc, vxc, vyc, vzc, m, n)
+            vxp = vx + dt*axp + 0.5*adxp*dt2
+            vyp = vy + dt*ayp + 0.5*adyp*dt2
+            vzp = vz + dt*azp + 0.5*adzp*dt2
 
-            # Determining higher order corrections 
-            xadd = np.float64(-6.0)*(axp - axc) - dt*(np.float64(4.0)*adxp + np.float64(2.0)*adxc)
-            yadd = np.float64(-6.0)*(ayp - ayc) - dt*(np.float64(4.0)*adyp + np.float64(2.0)*adyc)
-            zadd = np.float64(-6.0)*(azp - azc) - dt*(np.float64(4.0)*adzp + np.float64(2.0)*adzc)
+            # Start the loop through for correcting
+            for it in range(pecOrder):
+                # Using predicited p and v for first evaluation, corrected for all else
+                if it == 0:
+                    axc, ayc, azc, adxc, adyc, adzc, gp = accelerations(xp, yp, zp, vxp, vyp, vzp, m, n, nlist)
+                else:
+                    axc, ayc, azc, adxc, adyc, adzc, gp = accelerations(xc, yc, zc, vxc, vyc, vzc, m, n, nlist)
 
-            xaddd = np.float64(12.0)*(axp - axc) + np.float64(6.0)*dt*(adxp + adxc)
-            yaddd = np.float64(12.0)*(ayp - ayc) + np.float64(6.0)*dt*(adyp + adyc)
-            zaddd = np.float64(12.0)*(azp - azc) + np.float64(6.0)*dt*(adzp + adzc)
+                # Determining higher order corrections 
+                xadd = np.float64(-6.0)*(axp - axc)/dt2 - (np.float64(4.0)*adxp + np.float64(2.0)*adxc)/dt
+                yadd = np.float64(-6.0)*(ayp - ayc)/dt2 - (np.float64(4.0)*adyp + np.float64(2.0)*adyc)/dt
+                zadd = np.float64(-6.0)*(azp - azc)/dt2 - (np.float64(4.0)*adzp + np.float64(2.0)*adzc)/dt
 
-            # Adding the corrections 
-            xc = xp + dt2*xadd/np.float64(24.0) + dt2*xaddd/np.float64(120.0)
-            yc = yp + dt2*yadd/np.float64(24.0) + dt2*yaddd/np.float64(120.0)
-            zc = zp + dt2*zadd/np.float64(24.0) + dt2*zaddd/np.float64(120.0)
+                xaddd = np.float64(12.0)*(axp - axc)/dt3 + np.float64(6.0)*(adxp + adxc)/dt2
+                yaddd = np.float64(12.0)*(ayp - ayc)/dt3 + np.float64(6.0)*(adyp + adyc)/dt2
+                zaddd = np.float64(12.0)*(azp - azc)/dt3 + np.float64(6.0)*(adzp + adzc)/dt2
 
-            vxc = vxp + dt*xadd/np.float64(6.0) + dt*xaddd/np.float64(24.0)
-            vyc = vyp + dt*yadd/np.float64(6.0) + dt*yaddd/np.float64(24.0)
-            vzc = vzp + dt*zadd/np.float64(6.0) + dt*zaddd/np.float64(24.0)
+                # Adding the corrections 
+                xc = xp + dt4*xadd/np.float64(24.0) + dt5*xaddd/np.float64(120.0)
+                yc = yp + dt4*yadd/np.float64(24.0) + dt5*yaddd/np.float64(120.0)
+                zc = zp + dt4*zadd/np.float64(24.0) + dt5*zaddd/np.float64(120.0)
 
-        # Updating the positions and velocities with the final solution
-        x = xc; y = yc; z = zc; vx = vxc; vy = vyc; vz = vzc
+                vxc = vxp + dt3*xadd/np.float64(6.0) + dt4*xaddd/np.float64(24.0)
+                vyc = vyp + dt3*yadd/np.float64(6.0) + dt4*yaddd/np.float64(24.0)
+                vzc = vzp + dt3*zadd/np.float64(6.0) + dt4*zaddd/np.float64(24.0)
 
-        # Calculating the KE and GPE
-        ke = np.float64(0.5) * m * (vx*vx + vy*vy + vz*vz)
-        K = np.append(K, np.array_split(ke, n), axis=1)
-        G = np.append(G, np.array_split(gp, n), axis=1)
+            # Updating the positions and velocities with the final solution
+            x = xc; y = yc; z = zc; vx = vxc; vy = vyc; vz = vzc
 
-        # Updating the timestep
-        if dynamicTimestep:
-            dt = nextTimeStep(axc, ayc, azc, adxc, adyc, adzc, xadd, yadd, zadd, xaddd, yaddd, zaddd, n, dt)
-        
-        # Ticking the clock
-        t = t + dt
-        outputCounter = outputCounter + dt
+            # Calculating the conserved quantities
+            ke = np.float64(0.5) * m * np.sqrt(vx*vx + vy*vy + vz*vz)**2
+            pmx = m * vx
+            pmy = m * vy
+            pmz = m * vz
 
-        # Outputing based on the given time interval
-        if outputCounter > outputInterval:
-            # Update progress bar
-            progBar.update(outputCounter)
+            # Appending calcualted values to arrays
+            Px = np.append(Px, np.array_split(pmx, n), axis=1) # Momentum
+            Py = np.append(Py, np.array_split(pmy, n), axis=1) # Momentum
+            Pz = np.append(Pz, np.array_split(pmz, n), axis=1) # Momentum
+            Ke = np.append(Ke, np.array_split(ke, n), axis=1) # Kinetic Energy
+            Ge = np.append(Ge, np.array_split(gp, n), axis=1) # Gravitational Potential Energy
 
-            # Resetting counter
-            outputCounter = 0
+            # Updating the timestep
+            if dynamicTimestep:
+                dt = nextTimeStep(axc, ayc, azc, adxc, adyc, adzc, xadd, yadd, zadd, xaddd, yaddd, zaddd, n, dt)
+            
+            # Ticking the clock
+            t = t + dt
+            outputCounter = outputCounter + dt
 
-            # Appendng to arrays
-            xarr = np.append(xarr, np.array_split(x, n), axis=1)
-            yarr = np.append(yarr, np.array_split(y, n), axis=1)
-            zarr = np.append(zarr, np.array_split(z, n), axis=1)
-            dtarr = np.append(dtarr, dt)
-            tarr = np.append(tarr, t)
+            # Outputing based on the given time interval
+            if outputCounter > outputInterval:
+                # Update progress bar
+                progBar.update(outputCounter)
+
+                # Appendng to arrays
+                xarr = np.append(xarr, np.array_split(x, n), axis=1)
+                yarr = np.append(yarr, np.array_split(y, n), axis=1)
+                zarr = np.append(zarr, np.array_split(z, n), axis=1)
+                tarr = np.append(tarr, t)
+                dtarr = np.append(dtarr, dt)
+
+                # Resetting output counter
+                outputCounter = 0
+
+                # Outputting a file
+                #output(t, tmax, x, y, z, vx, vy, vz, m, n)
+
+    except KeyboardInterrupt:
+        pass
 
     # Closing the progress bar when complete
     progBar.close()
 
     # Returning the arrays
-    return G, K, xarr, yarr, zarr, dtarr, tarr
+    return Ge, Ke, Px, Py, Pz, xarr, yarr, zarr, dtarr, tarr
 
 ''' Main Program Call '''
 
@@ -253,12 +306,12 @@ else:
     dyn = False
 
 print("Maximum Time Selection \n")
-timeUnit = input("Unit of Time (Gyear, Myear, kYear, Year, Month, Week, Day): ")
+timeUnit = input("Unit of Time (GYear, MYear, kYear, Year, Month, Week, Day): ")
 timeNumber = input("Number of Time Units: ")
 
-if timeUnit == "Gyear":
+if timeUnit == "GYear":
     timeUnit = 1e9 * 365*24*60*60
-elif timeUnit == "Myear":
+elif timeUnit == "MYear":
     timeUnit = 1e6 * 365*24*60*60
 elif timeUnit == "kYear":
     timeUnit = 1e3 * 365*24*60*60
@@ -268,13 +321,15 @@ elif timeUnit == "Month":
     timeUnit = 30*24*60*60
 elif timeUnit == "Week":
     timeUnit = 7*24*60*60
+elif timeUnit == "Day":
+    timeUnit = 24*60*60
 else:
     timeUnit = 24*60*60*365
 
 maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
 
 # Calling the hermite function
-g, k, x, y, z, dts, t = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), str(textFile), np.int64(maximumTime))
+g, k, px, py, pz, x, y, z, dts, t = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), str(textFile), np.int64(maximumTime))
 
 # Getting the shape of the arrays
 arrayShape = g.shape
@@ -282,32 +337,57 @@ bodyAmount = arrayShape[0]
 valuesAmount = arrayShape[1]
 
 # Summing energies
-totalKinetic = np.zeros(valuesAmount)
-totalGravity = np.zeros(valuesAmount)
+totalKinetic = np.zeros(valuesAmount-1)
+totalGravity = np.zeros(valuesAmount-1)
+totalMomentumX = totalMomentumY = totalMomentumZ = np.zeros(valuesAmount-1)
 
 # Looping through to sum
 for i in range(bodyAmount):
-    totalKinetic = totalKinetic + k[i]
-    totalGravity = totalGravity + g[i]
+    totalKinetic = totalKinetic + k[i][1:]
+    totalGravity = totalGravity + g[i][1:]
+    totalMomentumX = totalMomentumX + px[i][1:]
+    totalMomentumY = totalMomentumY + py[i][1:]
+    totalMomentumZ = totalMomentumZ + pz[i][1:]
 
 # Getting the total energy
 totalEnergy = totalKinetic + totalGravity
 
-# Getting the initial energy
+# Getting the initial energy and momentum
 initialEnergy = totalEnergy[1]
+initialMomentX = totalMomentumX[1]
+initialMomentY = totalMomentumY[1]
+initialMomentZ = totalMomentumZ[1]
 
 # Finding the % change
-percentChange = (totalEnergy-initialEnergy)/initialEnergy
+percentChangeE = (totalEnergy-initialEnergy)/initialEnergy
+percentChangePx = (totalMomentumX-initialMomentX)/initialMomentX
+percentChangePy = (totalMomentumY-initialMomentY)/initialMomentY
+percentChangePz = (totalMomentumZ-initialMomentZ)/initialMomentZ
 
 # Plotting the energy evolution
-plt.figure(figsize=(10,10))
-plt.plot(percentChange[1:])
-plt.show()
+plt.figure(figsize=(8,8))
+plt.title("Energy")
+plt.plot(percentChangeE[1:])
 
-plt.figure(figsize=(10,10))
-plt.plot(x[0][1:], y[0][1:])
-plt.show()
+plt.figure(figsize=(8,8))
+plt.title("Momentum X")
+plt.plot(percentChangePx[1:])
 
-plt.figure(figsize=(10,10))
+plt.figure(figsize=(8,8))
+plt.title("Momentum Y")
+plt.plot(percentChangePy[1:])
+
+plt.figure(figsize=(8,8))
+plt.title("Momentum Z")
+plt.plot(percentChangePz[1:])
+
+plt.figure(figsize=(8,8))
+plt.title("Timestep")
 plt.plot(dts[1:])
+
+fig = plt.figure(figsize=(8,8))
+plt.title("Position")
+ax = plt.axes(projection="3d")
+for i in range(bodyAmount):
+    plt.plot(x[i][1:], y[i][1:], z[i][1:])
 plt.show()
