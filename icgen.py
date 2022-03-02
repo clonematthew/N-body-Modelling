@@ -203,6 +203,6 @@ def generateCylindricalFilament(numberOfClusters, clusterSeparation, clyinderRad
 
     return x, y, z, vx, vy, vz, m
 
-x, y, z, vx, vy, vz, m = generateCluster(5, 100e11, 2, 0)
+x, y, z, vx, vy, vz, m = generateCluster(10, 200e11, 2, 0)
 
 outputICs(0, 60*60*24*365*1000, x, y, z, vx, vy, vz, m)

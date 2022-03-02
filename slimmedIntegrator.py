@@ -86,9 +86,10 @@ def accelerations(x, y, z, vx, vy, vz, m, n, nlist):
 
 # Function to calculate the timestep
 @jit(nopython=True)
-def nextTimeStep(ax, ay, az, adx, ady, adz, addx, addy, addz, adddx, adddy, adddz, n, dt):
+def nextTimeStep(ax, ay, az, adx, ady, adz, n, dt):
     # List for timesteps & setting old and new dt values
     dtList = []
+    newdt = 0.0
     dt = np.float64(dt)
 
     # Looping through all bodies to determine their timestep
@@ -99,6 +100,15 @@ def nextTimeStep(ax, ay, az, adx, ady, adz, addx, addy, addz, adddx, adddy, addd
 
         # Calculating timestep
         dtList.append(e*a/ad)
+
+    # Choosing the minimum timestep
+    newdt = min(dtList)
+
+    # Preventing timestep jumps from being too large
+    if newdt > 1.3*dt:
+        newdt = 1.3*dt
+    elif newdt < 0.7*dt:
+        newdt = 0.7*dt
 
     # Returning the new timestep
     return min(dtList)
@@ -174,13 +184,15 @@ def init(dataFile):
     return t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz
 
 # Function that actually runs the integrator
-def hermiteIntegrator(dt, dynamicTimestep, outputNumber, dataFile, tmax):
+def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, tmax):
     # Initialising
     t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz = init(dataFile)
 
     # Setting up counters and progress bar etc
     outputInterval = np.float64(tmax / outputNumber)
+    fileInterval = np.float64(tmax / fileNumber)
     outputCounter = 0.0
+    fileCounter = 0.0
     progBar = tqdm(total=tmax)
     
     # List for looping
@@ -188,12 +200,16 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, dataFile, tmax):
     nlist = np.append(nlist, nlist)
 
     # Setting number of times to predict correct
-    pecOrder = 3
+    pecOrder = 2
 
     # Assigning variables to ke and pm
     ke = np.zeros(n, dtype=np.float64)
     pm = np.zeros(n, dtype=np.float64)
 
+    # Setting the first timestep using the a over a dot equation
+    if dynamicTimeStep == True:
+        ax, ay, az, adx, ady, adz, _ = accelerations(x, y, z, vx, vy, vz, m, n, nlist)
+        dt = min(np.sqrt(e * (ax*ax + ay*ay + az*az) / (adx*adx + ady*ady + adz*adz)))
     try:
         # The main while loop of the function
         while t < tmax:
@@ -259,11 +275,12 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, dataFile, tmax):
 
             # Updating the timestep
             if dynamicTimestep:
-                dt = nextTimeStep(axc, ayc, azc, adxc, adyc, adzc, xadd, yadd, zadd, xaddd, yaddd, zaddd, n, dt)
+                dt = nextTimeStep(axc, ayc, azc, adxc, adyc, adzc, n, dt)
             
             # Ticking the clock
             t = t + dt
             outputCounter = outputCounter + dt
+            fileCounter = fileCounter + dt
 
             # Outputing based on the given time interval
             if outputCounter > outputInterval:
@@ -280,8 +297,13 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, dataFile, tmax):
                 # Resetting output counter
                 outputCounter = 0
 
-                # Outputting a file
-                #output(t, tmax, x, y, z, vx, vy, vz, m, n)
+                if fileCounter > fileInterval:
+
+                    # Outputting a file
+                    output(t, tmax, x, y, z, vx, vy, vz, m, n)
+
+                    # Resetting file counter
+                    fileCounter = 0
 
     except KeyboardInterrupt:
         pass
@@ -299,6 +321,7 @@ textFile = input("Name of the data file: ")
 initialdt = input("Time-step: ")
 dynamicTimeStep = input("Dynamic Time Step? (Y or N): ")
 outputNumber = input("Number of Outputs: ")
+fileNumber = input("Number of Output Files: ")
 
 if dynamicTimeStep == "Y":
     dyn = True
@@ -329,7 +352,7 @@ else:
 maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
 
 # Calling the hermite function
-g, k, px, py, pz, x, y, z, dts, t = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), str(textFile), np.int64(maximumTime))
+g, k, px, py, pz, x, y, z, dts, t = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), np.int64(fileNumber), str(textFile), np.int64(maximumTime))
 
 # Getting the shape of the arrays
 arrayShape = g.shape
@@ -389,5 +412,6 @@ fig = plt.figure(figsize=(8,8))
 plt.title("Position")
 ax = plt.axes(projection="3d")
 for i in range(bodyAmount):
-    plt.plot(x[i][1:], y[i][1:], z[i][1:])
+    plt.plot(x[i][1:], y[i][1:], z[i][1:], label=i)
+    plt.legend(loc="best")
 plt.show()

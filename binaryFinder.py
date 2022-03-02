@@ -10,17 +10,15 @@ eCutoff = np.float64(3)     # Energy Ratio for a Binary
 def binaryFinder(x, y, z, vx, vy, vz, m, n):
     # Allocating memory for important arrays
     binarySeparations = np.zeros((n, n), dtype=np.float64) 
-    massCombinations = np.zeros((n, n), dtype=np.float64)
-    gravEnergies = np.zeros((n, n), dtype=np.float64)
-    energyRatio = np.zeros((n, n), dtype=np.float64)
-    kintEnergies = np.zeros(n, dtype=np.float64)
+    reducedMasses = np.zeros((n, n), dtype=np.float64)
+    bindingEnergies = np.zeros((n, n), dtype=np.float64)
+    comx = np.zeros(n)
+    comy = np.zeros(n)
+    comz = np.zeros(n)
     
     # Defining arrays to store the indicies of binary pairs
     binaryRows = []
     binaryColumns = []
-
-    # Calculating kinetic energies
-    kintEnergies = 0.5 * m * (vx*vx + vy*vy + vz*vz)
 
     # List for looping
     nlist = np.arange(0, n, 1, dtype=np.int64)
@@ -28,29 +26,66 @@ def binaryFinder(x, y, z, vx, vy, vz, m, n):
 
     # Looping through every body pair
     for i in range(n):
-        for j in nlist[i:i+n]:
+        for j in nlist[i+1:n]:
             # Calcualting separations
             dx = x[j] - x[i]
             dy = y[j] - y[i]
             dz = z[j] - z[i]
 
-            # Determining magnitude of distance
+            # Calculating relative velociteis
+            dvx = vx[j] - vx[i]
+            dvy = vy[j] - vy[i]
+            dvz = vz[j] - vz[i]
+
+            # Determining magnitude of distance and velocity
             r = np.sqrt(dx*dx + dy*dy + dz*dz)
+            v = np.sqrt(dvx*dvx + dvy*dvy + dvz*dvz)
 
             # Assigning this to the 2D array
             binarySeparations[i][j] = r
-            massCombinations[i][j] = m[i] * m[j]
 
-            # Calculating gravtiational potential for this pair
-            gravEnergies[i][j] = G * massCombinations[i][j] / binarySeparations[i][j]
-        
-            # Calculating the energy ratio of this pair
-            energyRatio[i][j] = gravEnergies[i][j] / (kintEnergies[i])
+            # Calculating the reduced masses and mass combint
+            reducedMasses[i][j] = (m[i] * m[j])/(m[i] + m[j])
+
+            # Calculating the binding energy of the binary
+            bindingEnergies[i][j] = 0.5 * reducedMasses[i][j] * v * v - G * m[i] * m[j] / r
 
             # Determining if this is a binary, and if so adding to the lists
-            if energyRatio[i][j] > eCutoff:
+            if bindingEnergies[i][j] < -1e34:
                 binaryRows.append(i)
                 binaryColumns.append(j)
+
+    # Looping through all the binaries we have found
+    for p in range(len(binaryRows)):
+        # Finding the CoM of the binary
+        comx[p] = (x[binaryRows[p]] * m[binaryRows[p]] + x[binaryColumns[p]] * m[binaryColumns[p]]) / (m[binaryRows[p]] + m[binaryColumns[p]])
+        comy[p] = (y[binaryRows[p]] * m[binaryRows[p]] + y[binaryColumns[p]] * m[binaryColumns[p]]) / (m[binaryRows[p]] + m[binaryColumns[p]])
+        comz[p] = (z[binaryRows[p]] * m[binaryRows[p]] + z[binaryColumns[p]] * m[binaryColumns[p]]) / (m[binaryRows[p]] + m[binaryColumns[p]])
+
+        # Calculating the distance to every other day 
+        dStars = np.sqrt((x - comx[p])**2 + (y - comy[p])**2 + (z - comz[p])**2)
+
+        # Taking the closest 3 stars 
+        dStars =  np.sort(dStars)
+
+        # Calculating the distance to the 3rd closest star
+        d = dStars[2]
+
+        # Calculating the volume 
+        volStars = (4*np.pi*d**3)/3
+
+        # Calculating density of nearest 3 neighbours
+        densityClust = 3 / volStars
+
+        # Calculating the density of the binary
+        volBinary = (4*np.pi*binarySeparations[binaryRows[p]][binaryColumns[p]]**3)
+        densityBin = 2/ volBinary
+
+        # Checking if binary is much greater in density than the surrounding cluster
+        if densityBin < 2*densityClust:
+            # Deleting binaries from the list that dont meet this criteria
+            binaryRows = np.delete(binaryRows, binaryRows[p])
+            binaryColumns = np.delete(binaryColumns, binaryColumns[p])
 
     return binaryRows, binaryColumns
 
@@ -66,6 +101,7 @@ def binaryPropertyDeterminer(binaryRows, binaryColumns, x, y, z, vx, vy, vz, m):
     periods = np.zeros(n)
     eccentricities = np.zeros(n)
     orbitalAM = np.zeros(n)
+    massRatios = np.zeros(n)
 
     # Looping through all the binaries
     for k in range(n):
@@ -108,10 +144,18 @@ def binaryPropertyDeterminer(binaryRows, binaryColumns, x, y, z, vx, vy, vz, m):
         # Calculatinf the orbital angular momentum
         orbitalAM[k] = np.sqrt(G*semiMajorAxes[k]*(1-eccentricities[k]**2)/systemMasses[k])*m[binaryRows[k]]*m[binaryColumns[k]]
 
-    # Returning the calculated values
-    return bindingEnergies, semiMajorAxes, systemMasses, periods, eccentricities, orbitalAM
+        # Calculating the mass ratio (always biggest over smallest)
+        if m[binaryRows[k]] > m[binaryColumns[k]]:
+            massRatios[k] = m[binaryRows[k]] / m[binaryColumns[k]]
+        else:
+            massRatios[k] = m[binaryColumns[k]] / m[binaryRows[k]]
 
-t, _, x, y, z, vx, vy, vz, m = np.loadtxt("1.00.txt", delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
+    print(bindingEnergies, semiMajorAxes, systemMasses, periods, eccentricities, orbitalAM, massRatios)
+
+    # Returning the calculated values
+    return bindingEnergies, semiMajorAxes, systemMasses, periods, eccentricities, orbitalAM, massRatios
+
+t, _, x, y, z, vx, vy, vz, m = np.loadtxt("0.75.txt", delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
 n = len(x)
 
 rows, columns = binaryFinder(x, y, z, vx, vy, vz, m, n)
