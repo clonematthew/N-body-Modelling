@@ -7,7 +7,7 @@ This repository includes:
 2. An N-Body integrator.
 3. A basic binary finder code.
 
-The initial conditions generator is based on works by Andre et al (2010), Lada & Lada (2003) and Konyves & Andre (2016).
+The initial conditions generator is based on works by Andre et al (2010), Lada & Lada (2003), Chabrier (2003) and Konyves & Andre (2016).
 The N-Body code uses methods developed by Makino & Arseth (1992) and Kokubo et al (1997).
 The Binary Finder uses methods and equations from Pavel Kroupa.
 
