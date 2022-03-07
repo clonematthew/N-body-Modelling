@@ -7,8 +7,6 @@ G = 6.67e-11
 
 # Function to generate cluster properties
 def generateCluster(numberOfStars, clusterRadius, alpha, driftVelocity):
-    # Setting the random seed
-    #np.random.seed(seed)
 
     # Generating a number of random values of x, y and z in a square of radius R
     xCandidates = 2*clusterRadius*np.random.random(numberOfStars*5) - clusterRadius
@@ -39,7 +37,6 @@ def generateCluster(numberOfStars, clusterRadius, alpha, driftVelocity):
     zValues = zValues[:numberOfStars]
 
     # Generating the masses of the cluster componenets
-    #masses = np.ones(numberOfStars)*1.9e30*np.random.random(numberOfStars)
     masses = np.random.lognormal(np.log(0.079),0.69, numberOfStars) * 1.989e30
 
     # Finding the centre of mass of the system
@@ -93,6 +90,13 @@ def generateCluster(numberOfStars, clusterRadius, alpha, driftVelocity):
     vyCorrected = vy*np.sqrt(KEscale)
     vzCorrected = vz*np.sqrt(KEscale)
 
+    # Working out the veloicty dispersion
+    vmag = vxCorrected*vxCorrected + vyCorrected*vyCorrected + vzCorrected*vzCorrected
+    vsig = np.sqrt(np.sum(vmag) / numberOfStars)
+
+    # Calculating the crossing time
+    tcross = clusterRadius / vsig
+
     # Adding on a random drift velocity in some direction
     driftX = driftVelocity*(2*np.random.random(1)-1)
     driftY = driftVelocity*(2*np.random.random(1)-1)
@@ -103,11 +107,11 @@ def generateCluster(numberOfStars, clusterRadius, alpha, driftVelocity):
     vzCentered = vzCentered + driftZ
 
     # Returning the values
-    return xValuesCentered, yValuesCentered, zValuesCentered, vxCorrected, vyCorrected, vzCorrected, masses
+    return xValuesCentered, yValuesCentered, zValuesCentered, vxCorrected, vyCorrected, vzCorrected, masses, tcross
 
 def outputICs(time, maxTime, xpositions, ypositions, zpositions, xvelocities, yvelocities, zvelocities, masses):
     # Defining the name of the file
-    fname = "simData.txt"
+    fname = "cluster.txt"
 
     # Opening the file
     with open(fname, "w") as file:
@@ -147,7 +151,7 @@ def fillamentGenerator(numberOfClusters, clusterSeparation, clusterStarNumber, c
 
     # Generating the clusters and offsetting them
     for i in range(numberOfClusters):
-        xpos, ypos, zpos, vxs, vys, vzs, ms = generateCluster(clusterStarNumber, clusterRadius, alpha, driftVelocity)
+        xpos, ypos, zpos, vxs, vys, vzs, ms, _ = generateCluster(clusterStarNumber, clusterRadius, alpha, driftVelocity)
         adjuster = clusterDirections[i]
         for j in range(len(xpos)):
             x.append(xpos[j]+adjuster[0])
@@ -188,7 +192,7 @@ def generateCylindricalFilament(numberOfClusters, clusterSeparation, clyinderRad
     x = []; y = []; z = []; vx = []; vy = []; vz = []; m = []
 
     for i in range(numberOfClusters):
-        xpos, ypos, zpos, vxs, vys, vzs, ms = generateCluster(clusterStarNumber, clusterRadius, alpha, driftVelocity)
+        xpos, ypos, zpos, vxs, vys, vzs, ms, _ = generateCluster(clusterStarNumber, clusterRadius, alpha, driftVelocity)
         adjuster = clusterOffsets[i]
 
         for j in range(len(xpos)):
@@ -203,6 +207,6 @@ def generateCylindricalFilament(numberOfClusters, clusterSeparation, clyinderRad
 
     return x, y, z, vx, vy, vz, m
 
-x, y, z, vx, vy, vz, m = generateCluster(10, 200e11, 2, 0)
+x, y, z, vx, vy, vz, m, tc = generateCluster(15, 500e11, 2, 0)
 
-outputICs(0, 60*60*24*365*1000, x, y, z, vx, vy, vz, m)
+outputICs(0, 50*tc, x, y, z, vx, vy, vz, m)

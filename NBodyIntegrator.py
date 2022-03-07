@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 from numba import jit
 from tqdm import tqdm
 
+# Importing my own files
+from binaryFinder import *
+
 # Defining constants
 G = np.float64(6.67430e-11) # Newton's Gravitational constant
 s = np.float64(6.0e6)       # Softening, gravity "blurring"
@@ -107,8 +110,6 @@ def nextTimeStep(ax, ay, az, adx, ady, adz, n, dt):
     # Preventing timestep jumps from being too large
     if newdt > 1.3*dt:
         newdt = 1.3*dt
-    elif newdt < 0.7*dt:
-        newdt = 0.7*dt
 
     # Returning the new timestep
     return min(dtList)
@@ -133,7 +134,7 @@ def output(time, maxTime, xpositions, ypositions, zpositions, xvelocities, yvelo
 # Function that initialises the integrator 
 def init(dataFile):
     # Importing the ICs from the file
-    t, _, x, y, z, vx, vy, vz, m = np.loadtxt(dataFile, delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
+    t, tc, x, y, z, vx, vy, vz, m = np.loadtxt(dataFile, delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
 
     # Determining the number of bodies
     n = len(x)
@@ -173,20 +174,25 @@ def init(dataFile):
     vzc = np.zeros(n, dtype=np.float64)
 
     # Setting up arrays for plotting # TODO: Delete
-    xarr = yarr = zarr = np.zeros((n, 1), dtype=np.float64)
+    xarr = yarr = zarr = dCoM = np.zeros((n, 1), dtype=np.float64)
     tarr = dtarr = np.zeros(1, dtype=np.float64)
     Ke = Ge = Px = Py = Pz = np.zeros((n, 1), dtype=np.float64)
 
     # Only choosing the 1st value from the time array
     t = t[0]
+    tc = tc[0]
 
     # Returning all the arrays
-    return t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz
+    return t, tc,  x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz, dCoM
 
 # Function that actually runs the integrator
-def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, tmax):
+def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, useCrossingTime, tmax):
     # Initialising
-    t, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz = init(dataFile)
+    t, tc, x, y, z, vx, vy, vz, m, n, axp, ayp, azp, adxp, adyp, adzp, xadd, yadd, zadd, xaddd, yaddd, zaddd, axc, ayc, azc, adxc, adyc, adzc, xp, yp, zp, vxp, vyp, vzp, xc, yc, zc, vxc, vyc, vzc, xarr, yarr, zarr, tarr, dtarr, Ke, Ge, Px, Py, Pz, dCoM = init(dataFile)
+
+    # Using the crossing time of the cluster if desired
+    if useCrossingTime:
+        tmax = tc
 
     # Setting up counters and progress bar etc
     outputInterval = np.float64(tmax / outputNumber)
@@ -194,22 +200,20 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, t
     outputCounter = 0.0
     fileCounter = 0.0
     progBar = tqdm(total=tmax)
+    progBar.update(t)
     
     # List for looping
     nlist = np.arange(0, n, 1, dtype=np.int64)
     nlist = np.append(nlist, nlist)
 
-    # Setting number of times to predict correct
+    # Setting number of times to predict, evaluate and correct
     pecOrder = 2
 
-    # Assigning variables to ke and pm
-    ke = np.zeros(n, dtype=np.float64)
-    pm = np.zeros(n, dtype=np.float64)
-
-    # Setting the first timestep using the a over a dot equation
-    if dynamicTimeStep == True:
+    # Setting the first timestep using the a over a dot equation if dynamic timestep used
+    if dynamicTimestep:
         ax, ay, az, adx, ady, adz, _ = accelerations(x, y, z, vx, vy, vz, m, n, nlist)
         dt = min(np.sqrt(e * (ax*ax + ay*ay + az*az) / (adx*adx + ady*ady + adz*adz)))
+
     try:
         # The main while loop of the function
         while t < tmax:
@@ -260,19 +264,6 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, t
             # Updating the positions and velocities with the final solution
             x = xc; y = yc; z = zc; vx = vxc; vy = vyc; vz = vzc
 
-            # Calculating the conserved quantities
-            ke = np.float64(0.5) * m * np.sqrt(vx*vx + vy*vy + vz*vz)**2
-            pmx = m * vx
-            pmy = m * vy
-            pmz = m * vz
-
-            # Appending calcualted values to arrays
-            Px = np.append(Px, np.array_split(pmx, n), axis=1) # Momentum
-            Py = np.append(Py, np.array_split(pmy, n), axis=1) # Momentum
-            Pz = np.append(Pz, np.array_split(pmz, n), axis=1) # Momentum
-            Ke = np.append(Ke, np.array_split(ke, n), axis=1) # Kinetic Energy
-            Ge = np.append(Ge, np.array_split(gp, n), axis=1) # Gravitational Potential Energy
-
             # Updating the timestep
             if dynamicTimestep:
                 dt = nextTimeStep(axc, ayc, azc, adxc, adyc, adzc, n, dt)
@@ -283,7 +274,7 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, t
             fileCounter = fileCounter + dt
 
             # Outputing based on the given time interval
-            if outputCounter > outputInterval:
+            if outputCounter >= outputInterval:
                 # Update progress bar
                 progBar.update(outputCounter)
 
@@ -294,10 +285,37 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, t
                 tarr = np.append(tarr, t)
                 dtarr = np.append(dtarr, dt)
 
+                # Calculating the conserved quantities
+                ke = np.float64(0.5) * m * np.sqrt(vx*vx + vy*vy + vz*vz)**2
+                pmx = m * vx
+                pmy = m * vy
+                pmz = m * vz
+
+                # Appending calcualted values to arrays
+                Px = np.append(Px, np.array_split(pmx, n), axis=1) # Momentum
+                Py = np.append(Py, np.array_split(pmy, n), axis=1) # Momentum
+                Pz = np.append(Pz, np.array_split(pmz, n), axis=1) # Momentum
+                Ke = np.append(Ke, np.array_split(ke, n), axis=1) # Kinetic Energy
+                Ge = np.append(Ge, np.array_split(gp, n), axis=1) # Gravitational Potential Energy
+
+                # Calculating the centre of mass of the cluster
+                comx = np.sum(x * m)/np.sum(m)
+                comy = np.sum(y * m)/np.sum(m)
+                comz = np.sum(z * m)/np.sum(m)
+
+                # Subtracting this from the original position
+                dcomx = x - comx
+                dcomy = y - comy
+                dcomz = z - comz
+
+                # Calculating the magnitude of the distance and adding to the arrays
+                dcom = np.sqrt(dcomx**2 + dcomy**2 + dcomz**2)
+                dCoM = np.append(dCoM, np.array_split(dcom, n), axis=1)
+
                 # Resetting output counter
                 outputCounter = 0
 
-                if fileCounter > fileInterval:
+                if fileCounter >= fileInterval:
 
                     # Outputting a file
                     output(t, tmax, x, y, z, vx, vy, vz, m, n)
@@ -305,60 +323,94 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, t
                     # Resetting file counter
                     fileCounter = 0
 
+                    # Running the binary finder
+                    r, c, ti, tt, _, _, _, _, _, _, _, _, _, _, _, _, _, _ = binaryCheck(x, y, z, vx, vy, vz, m, n)
+
+                    print(r, c, ti, tt)
+
     except KeyboardInterrupt:
         pass
 
     # Closing the progress bar when complete
     progBar.close()
 
+    # Doing a final output and binary find
+    output(t, tmax, x, y, z, vx, vy, vz, m, n)
+    rf, cf, tif, ttf, _, _, _, _, _, _, _, _, _, _, _, _, _, _  = binaryCheck(x, y, z, vx, vy, vz, m, n)
+
+    # Lists for confirmed binaries
+    ro = []; co = []; tio = []; tto = []
+
+    print(rf, cf, tif, ttf)
+
+    # Checking that the binaries found previously still exist
+    for i in range(len(rf)):
+        # Looping through all the binaries in previous binary check
+        for j in range(len(r)):
+            if rf[i] == r[j] and cf[i] == c[j]:
+                ro.append(rf[i])
+                co.append(cf[i])
+                tio.append(tif[i])
+                tto.append(ttf[i])
+    
+    print(ro, co, tio, tto)
+
     # Returning the arrays
-    return Ge, Ke, Px, Py, Pz, xarr, yarr, zarr, dtarr, tarr
+    return Ge, Ke, Px, Py, Pz, xarr, yarr, zarr, dtarr, tarr, dCoM
 
 ''' Main Program Call '''
 
 # Asking for simulation parameters
 textFile = input("Name of the data file: ")
-initialdt = input("Time-step: ")
-dynamicTimeStep = input("Dynamic Time Step? (Y or N): ")
 outputNumber = input("Number of Outputs: ")
 fileNumber = input("Number of Output Files: ")
+dynamicTimeStep = input("Dynamic Time Step? (Y or N): ")
 
 if dynamicTimeStep == "Y":
     dyn = True
+    initialdt = 0
 else:
     dyn = False
+    initialdt = input("Time-step: ")
 
-print("Maximum Time Selection \n")
-timeUnit = input("Unit of Time (GYear, MYear, kYear, Year, Month, Week, Day): ")
-timeNumber = input("Number of Time Units: ")
+useCrossing = input("Use crossing time as max time? (Y or N): ")
 
-if timeUnit == "GYear":
-    timeUnit = 1e9 * 365*24*60*60
-elif timeUnit == "MYear":
-    timeUnit = 1e6 * 365*24*60*60
-elif timeUnit == "kYear":
-    timeUnit = 1e3 * 365*24*60*60
-elif timeUnit == "Year":
-    timeUnit = 365*24*60*60
-elif timeUnit == "Month":
-    timeUnit = 30*24*60*60
-elif timeUnit == "Week":
-    timeUnit = 7*24*60*60
-elif timeUnit == "Day":
-    timeUnit = 24*60*60
+if useCrossing == "Y":
+    useCrossingTime = True
+    maximumTime = 0
 else:
-    timeUnit = 24*60*60*365
+    useCrossingTime = False
+    print("Maximum Time Selection \n")
+    timeUnit = input("Unit of Time (GYear, MYear, kYear, Year, Month, Week, Day): ")
+    timeNumber = input("Number of Time Units: ")
 
-maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
+    if timeUnit == "GYear":
+        timeUnit = 1e9 * 365*24*60*60
+    elif timeUnit == "MYear":
+        timeUnit = 1e6 * 365*24*60*60
+    elif timeUnit == "kYear":
+        timeUnit = 1e3 * 365*24*60*60
+    elif timeUnit == "Year":
+        timeUnit = 365*24*60*60
+    elif timeUnit == "Month":
+        timeUnit = 30*24*60*60
+    elif timeUnit == "Week":
+        timeUnit = 7*24*60*60
+    elif timeUnit == "Day":
+        timeUnit = 24*60*60
+    else:
+        timeUnit = 24*60*60*365
+
+    maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
 
 # Calling the hermite function
-g, k, px, py, pz, x, y, z, dts, t = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), np.int64(fileNumber), str(textFile), np.int64(maximumTime))
+g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), np.int64(fileNumber), str(textFile), bool(useCrossingTime), np.int64(maximumTime))
 
 # Getting the shape of the arrays
 arrayShape = g.shape
 bodyAmount = arrayShape[0]
 valuesAmount = arrayShape[1]
-
+'''
 # Summing energies
 totalKinetic = np.zeros(valuesAmount-1)
 totalGravity = np.zeros(valuesAmount-1)
@@ -407,7 +459,13 @@ plt.plot(percentChangePz[1:])
 plt.figure(figsize=(8,8))
 plt.title("Timestep")
 plt.plot(dts[1:])
+'''
 
+plt.figure(figsize=(8,8))
+plt.title("Centre of Mass Distance")
+for i in range(bodyAmount):
+    plt.plot(dc[i][1:], label=i)
+plt.legend(loc="best")
 fig = plt.figure(figsize=(8,8))
 plt.title("Position")
 ax = plt.axes(projection="3d")

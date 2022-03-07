@@ -4,7 +4,6 @@
 import numpy as np
 
 G = np.float64(6.67e-11)    # Newton's Gravitational constant
-eCutoff = np.float64(3)     # Energy Ratio for a Binary
 
 # Definng the binary finder function
 def binaryFinder(x, y, z, vx, vy, vz, m, n):
@@ -17,43 +16,81 @@ def binaryFinder(x, y, z, vx, vy, vz, m, n):
     comz = np.zeros(n)
     
     # Defining arrays to store the indicies of binary pairs
-    binaryRows = []
-    binaryColumns = []
-
-    # List for looping
-    nlist = np.arange(0, n, 1, dtype=np.int64)
-    nlist = np.append(nlist, nlist)
+    bestPartner = []
+    bestPartnerEnergy = []
 
     # Looping through every body pair
     for i in range(n):
-        for j in nlist[i+1:n]:
-            # Calcualting separations
-            dx = x[j] - x[i]
-            dy = y[j] - y[i]
-            dz = z[j] - z[i]
+        # Creating variables for the current best binary index and energy
+        currentBestEnergy = 0
+        currentBestIndex = n+1
 
-            # Calculating relative velociteis
-            dvx = vx[j] - vx[i]
-            dvy = vy[j] - vy[i]
-            dvz = vz[j] - vz[i]
+        for j in range(n):
+            if i == j:
+                pass
+            else:
+                # Calcualting separations
+                dx = x[j] - x[i]
+                dy = y[j] - y[i]
+                dz = z[j] - z[i]
 
-            # Determining magnitude of distance and velocity
-            r = np.sqrt(dx*dx + dy*dy + dz*dz)
-            v = np.sqrt(dvx*dvx + dvy*dvy + dvz*dvz)
+                # Calculating relative velociteis
+                dvx = vx[j] - vx[i]
+                dvy = vy[j] - vy[i]
+                dvz = vz[j] - vz[i]
 
-            # Assigning this to the 2D array
-            binarySeparations[i][j] = r
+                # Determining magnitude of distance and velocity
+                r = np.sqrt(dx*dx + dy*dy + dz*dz)
+                v = np.sqrt(dvx*dvx + dvy*dvy + dvz*dvz)
 
-            # Calculating the reduced masses and mass combint
-            reducedMasses[i][j] = (m[i] * m[j])/(m[i] + m[j])
+                # Assigning this to the 2D array
+                binarySeparations[i][j] = r
 
-            # Calculating the binding energy of the binary
-            bindingEnergies[i][j] = 0.5 * reducedMasses[i][j] * v * v - G * m[i] * m[j] / r
+                # Calculating the reduced masses and mass combint
+                reducedMasses[i][j] = (m[i] * m[j])/(m[i] + m[j])
 
-            # Determining if this is a binary, and if so adding to the lists
-            if bindingEnergies[i][j] < -1e34:
-                binaryRows.append(i)
-                binaryColumns.append(j)
+                # Calculating the binding energy of the binary
+                bindingEnergies[i][j] = 0.5 * reducedMasses[i][j] * v * v - G * m[i] * m[j] / r
+
+                # Testing if this binding energy is bigger than the current lowest
+                if bindingEnergies[i][j] < currentBestEnergy:
+                    currentBestEnergy = bindingEnergies[i][j]
+                    currentBestIndex = j
+            
+        # Setting the best partner in the list
+        bestPartner.append(currentBestIndex)
+        bestPartnerEnergy.append(currentBestEnergy)
+
+    # Getting lists to store the best binary and numbers used
+    binaryRows = []
+    binaryColumns = []
+    numbersUsed = []
+
+    # Looping through every body again
+    for i in range(n):
+        # Checking if the binaries binding energy is negative
+        if bestPartnerEnergy[i] < 0:
+            # Checking that the best partner of the other body is me as well
+            if bestPartner[bestPartner[i]] == i:
+                newPairing = True
+
+                # Checking we havent already saved this pair
+                for j in range(len(numbersUsed)):
+                    # If any of the indicies match those previously used, don't add to binary list
+                    if i == numbersUsed[j] or bestPartner[i] == numbersUsed[j]:
+                        newPairing = False
+                
+                # Only adding the binary if this pairing hasn't been added previously
+                if newPairing:
+                    binaryRows.append(i)
+                    binaryColumns.append(bestPartner[i])
+                    numbersUsed.append(i)
+                    numbersUsed.append(bestPartner[i])
+
+    # Setting up a list for the stars not in a binary
+    unpairedList = []
+    for u in range(n):
+        unpairedList.append(u)
 
     # Looping through all the binaries we have found
     for p in range(len(binaryRows)):
@@ -79,15 +116,23 @@ def binaryFinder(x, y, z, vx, vy, vz, m, n):
 
         # Calculating the density of the binary
         volBinary = (4*np.pi*binarySeparations[binaryRows[p]][binaryColumns[p]]**3)
-        densityBin = 2/ volBinary
+        densityBin = 2 / volBinary
 
         # Checking if binary is much greater in density than the surrounding cluster
         if densityBin < 2*densityClust:
-            # Deleting binaries from the list that dont meet this criteria
-            binaryRows = np.delete(binaryRows, binaryRows[p])
-            binaryColumns = np.delete(binaryColumns, binaryColumns[p])
+            # Marking under dense binaries for deletion
+            binaryRows[p] = "n"
+            binaryColumns[p] = "n"
+        else:
+            unpairedList.remove(binaryRows[p])
+            unpairedList.remove(binaryColumns[p])
 
-    return binaryRows, binaryColumns
+    # Removing the under dense binaries
+    while "n" in binaryRows: 
+        binaryRows.remove("n")
+        binaryColumns.remove("n")
+
+    return binaryRows, binaryColumns, unpairedList  
 
 def binaryPropertyDeterminer(binaryRows, binaryColumns, x, y, z, vx, vy, vz, m):
     # The number of binaries
@@ -150,14 +195,89 @@ def binaryPropertyDeterminer(binaryRows, binaryColumns, x, y, z, vx, vy, vz, m):
         else:
             massRatios[k] = m[binaryColumns[k]] / m[binaryRows[k]]
 
-    print(bindingEnergies, semiMajorAxes, systemMasses, periods, eccentricities, orbitalAM, massRatios)
-
     # Returning the calculated values
     return bindingEnergies, semiMajorAxes, systemMasses, periods, eccentricities, orbitalAM, massRatios
 
-t, _, x, y, z, vx, vy, vz, m = np.loadtxt("0.75.txt", delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
+t, _, x, y, z, vx, vy, vz, m = np.loadtxt("0.25.txt", delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
 n = len(x)
 
-rows, columns = binaryFinder(x, y, z, vx, vy, vz, m, n)
-    
-binaryPropertyDeterminer(rows, columns, x, y, z, vx, vy, vz, m)
+def binaryCheck(x, y, z, vx, vy, vz, m, n):
+    # First run through of the binary finder to find binaries
+    rows, cols, ul = binaryFinder(x, y, z, vx, vy, vz, m, n)
+
+    # Getting the properties of these binaries
+    bE, bA, bM, bP, be, bO, bR = binaryPropertyDeterminer(rows, cols, x, y, z, vx, vy, vz, m)
+
+    # New lists to contain the x, y, z etc of starts
+    tx = []; ty = []; tz = []; tvx = []; tvy = []; tvz = []; tm = []; tt = []; ti = []
+
+    # Looping through the unpaired object list and adding them to the new list
+    for b in ul:
+        tx.append(x[b])
+        ty.append(y[b])
+        tz.append(z[b])
+        tvx.append(vx[b])
+        tvy.append(vy[b])
+        tvz.append(vz[b])
+        tm.append(m[b])
+        tt.append("s")
+        ti.append(b)
+
+    # Creating new stars for the binaries
+    for b in range(len(rows)):
+        # Centre of mass
+        tx.append((x[rows[b]] * m[rows[b]] + x[cols[b]] * m[cols[b]]) / (m[rows[b]] + m[cols[b]]))
+        ty.append((y[rows[b]] * m[rows[b]] + y[cols[b]] * m[cols[b]]) / (m[rows[b]] + m[cols[b]]))
+        tz.append((z[rows[b]] * m[rows[b]] + z[cols[b]] * m[cols[b]]) / (m[rows[b]] + m[cols[b]]))
+
+        # Centre of velocity
+        tvx.append((vx[rows[b]] * m[rows[b]] + vx[cols[b]] * m[cols[b]]) / (m[rows[b]] + m[cols[b]]))
+        tvy.append((vy[rows[b]] * m[rows[b]] + vy[cols[b]] * m[cols[b]]) / (m[rows[b]] + m[cols[b]]))
+        tvz.append((vz[rows[b]] * m[rows[b]] + vz[cols[b]] * m[cols[b]]) / (m[rows[b]] + m[cols[b]])) 
+
+        # System mass
+        tm.append(m[rows[b]] + m[cols[b]])
+
+        # Stating that this is a binary
+        tt.append("b")
+        ti.append(b)
+
+    # Running the binary finder again but this time using the new list
+    rt, ct, _ = binaryFinder(tx, ty, tz, tvx, tvy, tvz, tm, len(tx))
+
+    # Getting the properties of these triples
+    if len(rt) > 0:
+        tE, tA, tM, tP, te, tO, tR = binaryPropertyDeterminer(rt, ct, tx, ty, tz, tvx, tvy, tvz, tm)
+    else:
+        tE = tA = tM = tP = te = tO = tR = []
+
+    # Creating a list for the triples
+    tripIndex = []
+    tripType = []
+    for i in range(len(rows)):
+        tripIndex.append("N/A")
+        tripType.append("N/A")
+
+    # Looping through all the binaries
+    for t in range(len(rt)):
+        # Checking if any member of this binary is already a binary
+        if tt[rt[t]] == "b":
+            if tt[ct[t]] == "s":
+                tripIndex[ti[rt[t]]] = ti[ct[t]]
+                tripType[ti[rt[t]]] = "Binary-Star"
+            else:
+                bi = str(rows[ti[ct[t]]]) + str(cols[ti[ct[t]]])
+                tripIndex[ti[rt[t]]] = bi
+                tripType[ti[rt[t]]] = "Binary-Binary"
+                
+        if tt[ct[t]] == "b":
+            if tt[rt[t]] == "s":
+                tripIndex[ti[ct[t]]] = ti[rt[t]]
+                tripType[ti[ct[t]]] = "Binary-Star"
+            else:
+                bi = str(rows[ti[rt[t]]]) + str(cols[ti[rt[t]]])
+                tripIndex[ti[ct[t]]] = bi
+                tripType[ti[ct[t]]] = "Binary-Binary"
+
+    # Returning indicies and triple type
+    return rows, cols, tripIndex, tripType, bE, bA, bM, bP, be, bO, bR, tE, tA, tM, tP, te, tO, tR
