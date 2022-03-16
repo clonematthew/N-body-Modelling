@@ -6,9 +6,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numba import jit
 from tqdm import tqdm
+from csv import writer
 
 # Importing my own files
 from binaryFinder import *
+from initialConditionsGenerator import *
 
 # Defining constants
 G = np.float64(6.67430e-11) # Newton's Gravitational constant
@@ -318,15 +320,15 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
                 if fileCounter >= fileInterval:
 
                     # Outputting a file
-                    output(t, tmax, x, y, z, vx, vy, vz, m, n)
+                    #output(t, tmax, x, y, z, vx, vy, vz, m, n)
 
                     # Resetting file counter
                     fileCounter = 0
 
                     # Running the binary finder
-                    r, c, ti, tt, _, _, _, _, _, _, _, _, _, _, _, _, _, _ = binaryCheck(x, y, z, vx, vy, vz, m, n)
+                    #r, c, ti, tt, _, _, _, _, _, _, _, _, _, _, _, _, _, _ = binaryCheck(x, y, z, vx, vy, vz, m, n)
 
-                    print(r, c, ti, tt)
+                    #print(r, c, ti, tt)
 
     except KeyboardInterrupt:
         pass
@@ -335,16 +337,25 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
     progBar.close()
 
     # Doing a final output and binary find
-    output(t, tmax, x, y, z, vx, vy, vz, m, n)
-    rf, cf, tif, ttf, _, _, _, _, _, _, _, _, _, _, _, _, _, _  = binaryCheck(x, y, z, vx, vy, vz, m, n)
+    #output(t, tmax, x, y, z, vx, vy, vz, m, n)
+    #rf, cf, tif, ttf, bE, bA, bM, bP, be, bO, bR, tE, tA, tM, tP, te, tO, tR  = binaryCheck(x, y, z, vx, vy, vz, m, n)
 
     # Lists for confirmed binaries
-    ro = []; co = []; tio = []; tto = []
+    #ro = []; co = []; tio = []; tto = []
 
-    print(rf, cf, tif, ttf)
+    # List for confirmed binary data
+    #bEo = []; bAo = []; bMo = []; bPo = []; beo = []; bOo = []; bRo = []; tEo = []; tAo = []; tMo = []; tPo = []; teo = []; tOo = []; tRo = [];
+
+    #print(rf, cf, tif, ttf)
 
     # Checking that the binaries found previously still exist
+    #bWOT = 0
+    '''
     for i in range(len(rf)):
+        # Keeping track of if we have a triple or not
+        if tif[i] == "N/A":
+            bWOT = bWOT + 1
+
         # Looping through all the binaries in previous binary check
         for j in range(len(r)):
             if rf[i] == r[j] and cf[i] == c[j]:
@@ -352,9 +363,47 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
                 co.append(cf[i])
                 tio.append(tif[i])
                 tto.append(ttf[i])
-    
-    print(ro, co, tio, tto)
 
+                bEo.append(bE[i])
+                bAo.append(bA[i])
+                bMo.append(bM[i])
+                bPo.append(bP[i])
+                beo.append(be[i])
+                bOo.append(bO[i])
+                bRo.append(bR[i])
+
+                if tif[i] == "N/A" or tif[i] == "Binary-Binary":
+                    tEo.append("N/A")
+                    tAo.append("N/A")
+                    tMo.append("N/A")
+                    tPo.append("N/A")
+                    teo.append("N/A")
+                    tOo.append("N/A")
+                    tRo.append("N/A")
+                else:
+                    tEo.append(tE[i-bWOT])
+                    tAo.append(tA[i-bWOT])
+                    tMo.append(tM[i-bWOT])
+                    tPo.append(tP[i-bWOT])
+                    teo.append(te[i-bWOT])
+                    tOo.append(tO[i-bWOT])
+                    tRo.append(tR[i-bWOT])
+
+    # Opening the binary data csv file to write to it
+    with open("binaryData.csv", "a") as file:
+        # Getting a writer object
+        writ = writer(file)
+        
+        # Writing the data
+        for b in range(len(ro)):
+            data = [bEo[b], bAo[b], bMo[b], bPo[b], beo[b], bOo[b], bRo[b], tEo[b], tAo[b], tMo[b], tPo[b], teo[b], tOo[b], tRo[b], tto[b]]
+            writ.writerow(data)
+
+        # Closing the file
+        file.close()
+
+    print(ro, co, tio, tto)
+    '''
     # Returning the arrays
     return Ge, Ke, Px, Py, Pz, xarr, yarr, zarr, dtarr, tarr, dCoM
 
@@ -403,18 +452,38 @@ else:
 
     maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
 
-# Calling the hermite function
+'''
+while True:
+    try:
+        x, y, z, vx, vy, vz, m, tc = generateCluster(15, 1000e11, 2, 0)
+
+        outputICs(0, 100*tc, x, y, z, vx, vy, vz, m)
+
+                # Calling the hermite function
+                #g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), np.int64(fileNumber), str(textFile), bool(useCrossingTime), np.int64(maximumTime))
+        g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(1, True, 10000, 4, "cluster.txt", True, 1)
+
+    except KeyboardInterrupt:
+        pass
+'''
+
+generateCluster(5, 100e11, 2, 0)
+
 g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), np.int64(fileNumber), str(textFile), bool(useCrossingTime), np.int64(maximumTime))
 
 # Getting the shape of the arrays
 arrayShape = g.shape
 bodyAmount = arrayShape[0]
 valuesAmount = arrayShape[1]
-'''
+
+
+
 # Summing energies
 totalKinetic = np.zeros(valuesAmount-1)
 totalGravity = np.zeros(valuesAmount-1)
-totalMomentumX = totalMomentumY = totalMomentumZ = np.zeros(valuesAmount-1)
+totalMomentumX = np.zeros(valuesAmount-1)
+totalMomentumY = np.zeros(valuesAmount-1)
+totalMomentumZ = np.zeros(valuesAmount-1)
 
 # Looping through to sum
 for i in range(bodyAmount):
@@ -423,6 +492,8 @@ for i in range(bodyAmount):
     totalMomentumX = totalMomentumX + px[i][1:]
     totalMomentumY = totalMomentumY + py[i][1:]
     totalMomentumZ = totalMomentumZ + pz[i][1:]
+
+t = t[1:]
 
 # Getting the total energy
 totalEnergy = totalKinetic + totalGravity
@@ -439,37 +510,60 @@ percentChangePx = (totalMomentumX-initialMomentX)/initialMomentX
 percentChangePy = (totalMomentumY-initialMomentY)/initialMomentY
 percentChangePz = (totalMomentumZ-initialMomentZ)/initialMomentZ
 
+t = t / (365 * 24 * 60 * 60)
+
 # Plotting the energy evolution
 plt.figure(figsize=(8,8))
-plt.title("Energy")
-plt.plot(percentChangeE[1:])
+#plt.title("Energy")
+plt.plot(t[1:],percentChangeE[1:])
+plt.xlabel("Time, years")
+plt.ylabel(" $\\frac{\Delta E}{E}$")
 
 plt.figure(figsize=(8,8))
-plt.title("Momentum X")
-plt.plot(percentChangePx[1:])
+#plt.title("Momentum X")
+plt.plot(t[1:],percentChangePx[1:])
+plt.xlabel("Time, years")
+plt.ylabel(" $\\frac{\Delta p_x}{p_x}$")
 
 plt.figure(figsize=(8,8))
-plt.title("Momentum Y")
-plt.plot(percentChangePy[1:])
+#plt.title("Momentum Y")
+plt.plot(t[1:],percentChangePy[1:])
+plt.xlabel("Time, years")
+plt.ylabel(" $\\frac{\Delta p_y}{p_y}$")
 
 plt.figure(figsize=(8,8))
-plt.title("Momentum Z")
-plt.plot(percentChangePz[1:])
-
+#plt.title("Momentum Z")
+plt.plot(t[1:],percentChangePz[1:])
+plt.xlabel("Time, years")
+plt.ylabel(" $\\frac{\Delta p_z}{p_z}$")
+'''
 plt.figure(figsize=(8,8))
-plt.title("Timestep")
-plt.plot(dts[1:])
+plt.plot(x[1][1:], y[1][1:])
+plt.xlabel("x, m")
+plt.ylabel("y, m")
 '''
 
 plt.figure(figsize=(8,8))
-plt.title("Centre of Mass Distance")
+#plt.title("Timestep")
+plt.plot(t,dts[1:])
+
+plt.figure(figsize=(8,8))
+#plt.title("Centre of Mass Distance")
 for i in range(bodyAmount):
-    plt.plot(dc[i][1:], label=i)
-plt.legend(loc="best")
+    plt.plot(t,dc[i][1:], label=i)
+plt.xlabel("Time, years")
+plt.ylabel("Distance from Centre of Mass, m")
+#plt.legend(loc="best")
+
 fig = plt.figure(figsize=(8,8))
-plt.title("Position")
+#plt.title("Position")
 ax = plt.axes(projection="3d")
 for i in range(bodyAmount):
+    plt.plot(x[i][1], y[i][1], z[i][1], "kx" )
     plt.plot(x[i][1:], y[i][1:], z[i][1:], label=i)
-    plt.legend(loc="best")
+plt.xlabel("x, m")
+plt.ylabel("y, m")
+ax.set_zlabel("z, m")
+#plt.legend(loc="best")
+
 plt.show()

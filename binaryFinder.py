@@ -198,8 +198,8 @@ def binaryPropertyDeterminer(binaryRows, binaryColumns, x, y, z, vx, vy, vz, m):
     # Returning the calculated values
     return bindingEnergies, semiMajorAxes, systemMasses, periods, eccentricities, orbitalAM, massRatios
 
-t, _, x, y, z, vx, vy, vz, m = np.loadtxt("0.25.txt", delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
-n = len(x)
+#t, _, x, y, z, vx, vy, vz, m = np.loadtxt("0.25.txt", delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
+#n = len(x)
 
 def binaryCheck(x, y, z, vx, vy, vz, m, n):
     # First run through of the binary finder to find binaries
@@ -258,6 +258,9 @@ def binaryCheck(x, y, z, vx, vy, vz, m, n):
         tripIndex.append("N/A")
         tripType.append("N/A")
 
+    # Binaries used in a quadruple system
+    bUsed = []
+
     # Looping through all the binaries
     for t in range(len(rt)):
         # Checking if any member of this binary is already a binary
@@ -278,6 +281,8 @@ def binaryCheck(x, y, z, vx, vy, vz, m, n):
                 bi = str(rows[ti[rt[t]]]) + str(cols[ti[rt[t]]])
                 tripIndex[ti[ct[t]]] = bi
                 tripType[ti[ct[t]]] = "Binary-Binary"
+
+
 
     # Returning indicies and triple type
     return rows, cols, tripIndex, tripType, bE, bA, bM, bP, be, bO, bR, tE, tA, tM, tP, te, tO, tR
