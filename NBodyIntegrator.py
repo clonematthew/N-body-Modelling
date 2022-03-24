@@ -138,6 +138,16 @@ def init(dataFile):
     # Importing the ICs from the file
     t, tc, x, y, z, vx, vy, vz, m = np.loadtxt(dataFile, delimiter=" ", skiprows=1, unpack=True, dtype=np.float64)
 
+    #t = np.array([0,0], dtype=np.float64)
+    #tc = np.array([3e9, 3e9], dtype=np.float64)
+    #x = np.array([0.000000000000000000e+00, 0.000000000000000000e+00], dtype=np.float64)
+    #y = np.array([5.661717880000000000e+13, -9.882927930000000000e+13], dtype=np.float64)
+    #z = np.array([-1.401299260000000000e+14, 4.933501030000000000e+13], dtype=np.float64)
+    #vx = np.array([0.000000000000000000e+00, 0.000000000000000000e+00], dtype=np.float64)
+    #vy = np.array([3.404278423499999917e+02, -1.745519354399999941e+02], dtype=np.float64)
+    #vz = np.array([-1.175720704000000083e+01, 6.028423619999999872e+00], dtype=np.float64)
+    #m = np.array([3.448904680000000157e+29, 6.726383039999999439e+29], dtype=np.float64)
+
     # Determining the number of bodies
     n = len(x)
 
@@ -201,8 +211,8 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
     fileInterval = np.float64(tmax / fileNumber)
     outputCounter = 0.0
     fileCounter = 0.0
-    progBar = tqdm(total=tmax)
-    progBar.update(t)
+    #progBar = tqdm(total=tmax)
+    #progBar.update(t)
     
     # List for looping
     nlist = np.arange(0, n, 1, dtype=np.int64)
@@ -278,7 +288,7 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
             # Outputing based on the given time interval
             if outputCounter >= outputInterval:
                 # Update progress bar
-                progBar.update(outputCounter)
+                #progBar.update(outputCounter)
 
                 # Appendng to arrays
                 xarr = np.append(xarr, np.array_split(x, n), axis=1)
@@ -326,7 +336,7 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
                     fileCounter = 0
 
                     # Running the binary finder
-                    #r, c, ti, tt, _, _, _, _, _, _, _, _, _, _, _, _, _, _ = binaryCheck(x, y, z, vx, vy, vz, m, n)
+                    r, c, ti, tt, _, _, _, _, _, _, _, _, _, _, _, _, _, _ = binaryCheck(x, y, z, vx, vy, vz, m, n)
 
                     #print(r, c, ti, tt)
 
@@ -334,23 +344,21 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
         pass
 
     # Closing the progress bar when complete
-    progBar.close()
-
+    #progBar.close()
+    
     # Doing a final output and binary find
     #output(t, tmax, x, y, z, vx, vy, vz, m, n)
-    #rf, cf, tif, ttf, bE, bA, bM, bP, be, bO, bR, tE, tA, tM, tP, te, tO, tR  = binaryCheck(x, y, z, vx, vy, vz, m, n)
+    rf, cf, tif, ttf, bE, bA, bM, bP, be, bO, bR, tE, tA, tM, tP, te, tO, tR  = binaryCheck(x, y, z, vx, vy, vz, m, n)
 
     # Lists for confirmed binaries
-    #ro = []; co = []; tio = []; tto = []
+    ro = []; co = []; tio = []; tto = []
 
     # List for confirmed binary data
-    #bEo = []; bAo = []; bMo = []; bPo = []; beo = []; bOo = []; bRo = []; tEo = []; tAo = []; tMo = []; tPo = []; teo = []; tOo = []; tRo = [];
-
-    #print(rf, cf, tif, ttf)
+    bEo = []; bAo = []; bMo = []; bPo = []; beo = []; bOo = []; bRo = []; tEo = []; tAo = []; tMo = []; tPo = []; teo = []; tOo = []; tRo = [];
 
     # Checking that the binaries found previously still exist
-    #bWOT = 0
-    '''
+    bWOT = 0
+
     for i in range(len(rf)):
         # Keeping track of if we have a triple or not
         if tif[i] == "N/A":
@@ -372,15 +380,7 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
                 bOo.append(bO[i])
                 bRo.append(bR[i])
 
-                if tif[i] == "N/A" or tif[i] == "Binary-Binary":
-                    tEo.append("N/A")
-                    tAo.append("N/A")
-                    tMo.append("N/A")
-                    tPo.append("N/A")
-                    teo.append("N/A")
-                    tOo.append("N/A")
-                    tRo.append("N/A")
-                else:
+                if ttf[i] == "Binary-Star":
                     tEo.append(tE[i-bWOT])
                     tAo.append(tA[i-bWOT])
                     tMo.append(tM[i-bWOT])
@@ -393,22 +393,46 @@ def hermiteIntegrator(dt, dynamicTimestep, outputNumber, fileNumber, dataFile, u
     with open("binaryData.csv", "a") as file:
         # Getting a writer object
         writ = writer(file)
-        
+         
         # Writing the data
         for b in range(len(ro)):
-            data = [bEo[b], bAo[b], bMo[b], bPo[b], beo[b], bOo[b], bRo[b], tEo[b], tAo[b], tMo[b], tPo[b], teo[b], tOo[b], tRo[b], tto[b]]
+            data = [bEo[b], bAo[b], bMo[b], bPo[b], beo[b], bOo[b], bRo[b]]
             writ.writerow(data)
 
         # Closing the file
         file.close()
 
-    print(ro, co, tio, tto)
-    '''
+    # Opening the triple data csv file to write to it
+    with open("tripleData.csv", "a") as file:
+        # Getting a writer object
+        writ = writer(file)
+
+        # Writing the data 
+        for b in range(len(tEo)):
+            data = [tEo[b], tAo[b], tMo[b], tPo[b], teo[b], tOo[b], tRo[b]]
+            writ.writerow(data)
+
+    # Writing the binary fraction data to another file
+    with open("binaryNumbers.csv", "a") as file:
+        # Getting writer object
+        writ = writer(file)
+
+        # Writing the data
+        writ.writerow([n, 2*len(ro), 3*len(tEo)])
+
+        # Closing the file
+        file.close()
+
+    #print(ro, co, tio, tto)
+
+    
     # Returning the arrays
     return Ge, Ke, Px, Py, Pz, xarr, yarr, zarr, dtarr, tarr, dCoM
 
+
 ''' Main Program Call '''
 
+'''
 # Asking for simulation parameters
 textFile = input("Name of the data file: ")
 outputNumber = input("Number of Outputs: ")
@@ -453,21 +477,23 @@ else:
     maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
 
 '''
-while True:
+f=81
+while f<=100:
     try:
-        x, y, z, vx, vy, vz, m, tc = generateCluster(15, 1000e11, 2, 0)
+        x, y, z, vx, vy, vz, m, tc = generateCluster(5, 3200e11, 2, 0)
 
         outputICs(0, 100*tc, x, y, z, vx, vy, vz, m)
 
-                # Calling the hermite function
                 #g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), np.int64(fileNumber), str(textFile), bool(useCrossingTime), np.int64(maximumTime))
         g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(1, True, 10000, 4, "cluster.txt", True, 1)
 
+        f = f + 1
+        print("Done " + str(f))
+
     except KeyboardInterrupt:
         pass
-'''
 
-generateCluster(5, 100e11, 2, 0)
+'''
 
 g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(np.int64(initialdt), dyn, np.int64(outputNumber), np.int64(fileNumber), str(textFile), bool(useCrossingTime), np.int64(maximumTime))
 
@@ -475,8 +501,6 @@ g, k, px, py, pz, x, y, z, dts, t, dc = hermiteIntegrator(np.int64(initialdt), d
 arrayShape = g.shape
 bodyAmount = arrayShape[0]
 valuesAmount = arrayShape[1]
-
-
 
 # Summing energies
 totalKinetic = np.zeros(valuesAmount-1)
@@ -520,28 +544,25 @@ plt.xlabel("Time, years")
 plt.ylabel(" $\\frac{\Delta E}{E}$")
 
 plt.figure(figsize=(8,8))
+plt.subplots(2,1)
 #plt.title("Momentum X")
-plt.plot(t[1:],percentChangePx[1:])
+plt.subplot((2,1,1))
+plt.plot(t[1:],percentChangePx[1:], label="$P_x$")
 plt.xlabel("Time, years")
-plt.ylabel(" $\\frac{\Delta p_x}{p_x}$")
+plt.ylabel("$\\frac{\Delta p_x}{p_x}$")
 
-plt.figure(figsize=(8,8))
-#plt.title("Momentum Y")
-plt.plot(t[1:],percentChangePy[1:])
+plt.subplot((2,1,2))
+plt.plot(t[1:],percentChangePy[1:], label="$P_y$")
+#plt.plot(t[1:],percentChangePz[1:], label="$P_z$")
 plt.xlabel("Time, years")
-plt.ylabel(" $\\frac{\Delta p_y}{p_y}$")
+plt.ylabel("$\\frac{\Delta p_x}{p_x}$")
 
-plt.figure(figsize=(8,8))
-#plt.title("Momentum Z")
-plt.plot(t[1:],percentChangePz[1:])
-plt.xlabel("Time, years")
-plt.ylabel(" $\\frac{\Delta p_z}{p_z}$")
-'''
+
+
 plt.figure(figsize=(8,8))
 plt.plot(x[1][1:], y[1][1:])
 plt.xlabel("x, m")
 plt.ylabel("y, m")
-'''
 
 plt.figure(figsize=(8,8))
 #plt.title("Timestep")
@@ -567,3 +588,4 @@ ax.set_zlabel("z, m")
 #plt.legend(loc="best")
 
 plt.show()
+'''
