@@ -477,10 +477,11 @@ else:
     maximumTime = np.float64(timeUnit) * np.float64(timeNumber)
 
 '''
-f=81
+f=99
 while f<=100:
     try:
-        x, y, z, vx, vy, vz, m, tc = generateCluster(5, 3200e11, 2, 0)
+        #x, y, z, vx, vy, vz, m, tc = generateCluster(8, 100e11, 2, 0)
+        x, y, z, vx, vy, vz, m, tc = generateCylindricalFilament(3, 500e11, 50e11, 5, 100e11, 2, 0)
 
         outputICs(0, 100*tc, x, y, z, vx, vy, vz, m)
 

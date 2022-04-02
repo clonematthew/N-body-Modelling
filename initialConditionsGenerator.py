@@ -38,6 +38,7 @@ def generateCluster(numberOfStars, clusterRadius, alpha, driftVelocity):
 
     # Generating the masses of the cluster componenets
     masses = np.random.lognormal(np.log(0.079),0.69, numberOfStars) * 1.989e30
+    #masses = np.ones(numberOfStars)
 
     # Finding the centre of mass of the system
     totalMass = np.sum(masses)
@@ -189,11 +190,12 @@ def generateCylindricalFilament(numberOfClusters, clusterSeparation, clyinderRad
         clusterOffsets.append([xValuesChosen[i],yValuesChosen[i],zValues[i]])
 
     # Generating the right number of clusters and positioning them
-    x = []; y = []; z = []; vx = []; vy = []; vz = []; m = []
+    x = []; y = []; z = []; vx = []; vy = []; vz = []; m = []; t = []
 
     for i in range(numberOfClusters):
-        xpos, ypos, zpos, vxs, vys, vzs, ms, _ = generateCluster(clusterStarNumber, clusterRadius, alpha, driftVelocity)
+        xpos, ypos, zpos, vxs, vys, vzs, ms, tc = generateCluster(clusterStarNumber, clusterRadius, alpha, driftVelocity)
         adjuster = clusterOffsets[i]
+        t.append(tc)
 
         for j in range(len(xpos)):
             x.append(xpos[j]+adjuster[0])
@@ -205,4 +207,4 @@ def generateCylindricalFilament(numberOfClusters, clusterSeparation, clyinderRad
             vz.append(vzs[i])
             m.append(ms[i])
 
-    return x, y, z, vx, vy, vz, m
+    return x, y, z, vx, vy, vz, m, max(t)
